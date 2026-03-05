@@ -1,0 +1,273 @@
+# SailPoint Query AI Agent — Requirements Specification
+
+**Version:** 1.0
+**Date:** 2026-03-05
+**Status:** Draft
+
+---
+
+## 1. Project Overview
+
+### 1.1 Purpose
+
+The **SailPoint Query AI Agent** is an intelligent assistant that answers questions about SailPoint identity governance products — **IdentityIQ (IIQ)**, **IdentityNow (IDN)**, and **Identity Security Cloud (ISC)**. It leverages web search, official documentation, and community resources to deliver accurate, well-framed responses with source citations.
+
+### 1.2 Scope
+
+- Interactive CLI and web-based UI for querying SailPoint topics
+- Real-time web search across SailPoint documentation and IAM resources
+- Code generation, test case creation, and technical design capabilities
+- Multi-agent architecture using the ReAct (Reasoning + Acting) pattern
+- Support for multiple LLM backends (Claude, OpenAI, GLM, and others)
+
+### 1.3 Target Users
+
+| User Role | Use Case |
+|-----------|----------|
+| **IAM Engineers** | Implementation guidance, troubleshooting, configuration help |
+| **SailPoint Developers** | BeanShell rules, workflow design, API integration, connector development |
+| **Security Architects** | Technical design reviews, architecture recommendations, compliance patterns |
+| **QA Engineers** | Test case generation for SailPoint implementations |
+| **Consultants** | Rapid knowledge lookup, client deliverable drafting |
+
+---
+
+## 2. Functional Requirements
+
+### FR-1: Command-Line Interface (CLI)
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-1.1 | Single-query mode: `sailpoint-agent query "<question>"` | Must |
+| FR-1.2 | Interactive REPL mode: `sailpoint-agent chat` with conversation history | Must |
+| FR-1.3 | Rich markdown rendering in terminal (headings, tables, code blocks) | Must |
+| FR-1.4 | Syntax-highlighted code output for BeanShell, Java, XML, JSON, PowerShell | Must |
+| FR-1.5 | Model selection flag: `--model <provider/model>` | Must |
+| FR-1.6 | Verbose mode: `--verbose` to display ReAct reasoning traces | Should |
+| FR-1.7 | Output export: `--output <file>` to save responses to file | Should |
+| FR-1.8 | Session persistence: resume previous conversations | Could |
+
+### FR-2: Web User Interface (UI)
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-2.1 | Streamlit-based chat interface with message history | Must |
+| FR-2.2 | Model selector in sidebar (Claude, OpenAI, GLM, etc.) | Must |
+| FR-2.3 | Code blocks with syntax highlighting and copy buttons | Must |
+| FR-2.4 | Expandable "Reasoning Trace" panels showing agent thought process | Should |
+| FR-2.5 | Source citation links displayed below each response | Must |
+| FR-2.6 | Configuration panel (temperature, max iterations, search depth) | Should |
+| FR-2.7 | Conversation export (Markdown, PDF) | Could |
+
+### FR-3: Web Search & Knowledge Retrieval
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-3.1 | Search across SailPoint official documentation domains | Must |
+| FR-3.2 | Search SailPoint Developer Community forums | Must |
+| FR-3.3 | Search SailPoint Compass Community knowledge base | Must |
+| FR-3.4 | Search SailPoint open-source GitHub repositories | Should |
+| FR-3.5 | Fetch and parse documentation pages for detailed content | Must |
+| FR-3.6 | Return source URLs as citations with every response | Must |
+| FR-3.7 | Fallback to broader IAM/identity governance resources when SailPoint docs are insufficient | Should |
+| FR-3.8 | Domain-scoped search (prioritize SailPoint sources over general web) | Must |
+
+**Target Knowledge Sources:**
+
+| Source | URL | Content |
+|--------|-----|---------|
+| SailPoint Developer Portal | `developer.sailpoint.com` | APIs, SDKs, tools, extensibility |
+| SailPoint Product Docs | `documentation.sailpoint.com` | Product guides, admin manuals |
+| SailPoint Community | `community.sailpoint.com` | Forums, tutorials, knowledge base |
+| SailPoint Developer Forums | `developer.sailpoint.com/discuss` | Developer Q&A, code samples |
+| SailPoint OSS GitHub | `github.com/sailpoint-oss` | Open-source projects, examples |
+
+### FR-4: SailPoint Domain Expertise
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-4.1 | Answer IdentityIQ (IIQ) questions: Rules, Workflows, TaskDefinitions, Certifications, Connectors, BeanShell scripting, SCIM APIs, Application onboarding | Must |
+| FR-4.2 | Answer IdentityNow/ISC questions: V3 APIs, Transforms, Cloud Rules, Sources, Identity Profiles, Access Profiles, Roles, SaaS Connectors, Event Triggers | Must |
+| FR-4.3 | Answer general IAM concepts: RBAC, ABAC, SOD, Provisioning, Certification campaigns, Access Requests, Lifecycle management | Must |
+| FR-4.4 | Provide version-specific guidance (IIQ 7.x, 8.x; ISC current) | Should |
+| FR-4.5 | Explain SailPoint API authentication (OAuth 2.0, Personal Access Tokens, Basic Auth) | Must |
+
+### FR-5: Code Generation
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-5.1 | Generate BeanShell scripts for IIQ Rules (Identity, Correlation, Creation, BuildMap, etc.) | Must |
+| FR-5.2 | Generate Java code for custom IIQ connectors and plugins | Must |
+| FR-5.3 | Generate REST API call examples (curl, Python requests, Postman collections) | Must |
+| FR-5.4 | Generate XML configuration snippets (Application definitions, Workflow XML, TaskDefinition XML) | Must |
+| FR-5.5 | Generate PowerShell scripts for Active Directory provisioning operations | Should |
+| FR-5.6 | Generate ISC Transform JSON configurations | Must |
+| FR-5.7 | Generate ISC Cloud Rule code (Java/BeanShell) | Must |
+| FR-5.8 | Include inline comments and documentation in generated code | Must |
+
+### FR-6: Test Case Generation
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-6.1 | Generate unit test cases for BeanShell rules and Java components | Must |
+| FR-6.2 | Generate integration test scenarios for connector operations | Must |
+| FR-6.3 | Generate UAT (User Acceptance Testing) test cases for identity lifecycle flows | Must |
+| FR-6.4 | Generate certification campaign test scenarios | Should |
+| FR-6.5 | Generate access request workflow test cases | Should |
+| FR-6.6 | Output test cases in structured format (ID, Description, Preconditions, Steps, Expected Result) | Must |
+| FR-6.7 | Support test case generation for SOD policy validation | Should |
+
+### FR-7: Technical Design Generation
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-7.1 | Generate High-Level Design (HLD) documents for SailPoint implementations | Must |
+| FR-7.2 | Generate Low-Level Design (LLD) documents with technical specifications | Must |
+| FR-7.3 | Generate data flow diagrams (text-based / ASCII) | Should |
+| FR-7.4 | Generate architecture recommendations based on requirements | Must |
+| FR-7.5 | Generate connector design specifications | Should |
+| FR-7.6 | Generate workflow/business process design documents | Should |
+| FR-7.7 | Include integration architecture for connected systems (AD, LDAP, HR systems, databases) | Should |
+
+### FR-8: ReAct Agent Pattern
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-8.1 | Implement Reasoning + Acting loop: Think → Act → Observe → Repeat/Answer | Must |
+| FR-8.2 | Display reasoning traces to users when requested (verbose/trace mode) | Must |
+| FR-8.3 | Support multi-step research: chain multiple searches to build comprehensive answers | Must |
+| FR-8.4 | Configurable maximum iteration limit (default: 5) | Must |
+| FR-8.5 | Early termination when sufficient confidence is reached | Should |
+| FR-8.6 | Multi-agent orchestration: route queries to specialized sub-agents | Must |
+
+### FR-9: Multi-LLM Support
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-9.1 | Support Claude models (Opus, Sonnet, Haiku) as default LLM | Must |
+| FR-9.2 | Support OpenAI models (GPT-4, GPT-4o, etc.) | Must |
+| FR-9.3 | Support GLM models (GLM-4, etc.) | Should |
+| FR-9.4 | Support any model available through LiteLLM (100+ models) | Should |
+| FR-9.5 | Runtime model switching via CLI flag or UI selector | Must |
+| FR-9.6 | Per-model configuration (temperature, max tokens, API keys) | Must |
+| FR-9.7 | Automatic fallback to secondary model on primary failure | Should |
+
+### FR-10: Response Quality
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-10.1 | Responses must be well-structured with clear headings and sections | Must |
+| FR-10.2 | Include source citations with clickable URLs | Must |
+| FR-10.3 | Code blocks must use correct syntax highlighting per language | Must |
+| FR-10.4 | Explanations should be clear, concise, and accessible to mid-level engineers | Must |
+| FR-10.5 | Responses should distinguish between IIQ and IDN/ISC when relevant | Must |
+| FR-10.6 | Flag deprecated APIs or features when referenced | Should |
+| FR-10.7 | Provide confidence indicators for answers | Should |
+
+---
+
+## 3. Non-Functional Requirements
+
+### NFR-1: Accuracy
+
+| ID | Requirement | Target |
+|----|-------------|--------|
+| NFR-1.1 | Response accuracy relative to official SailPoint documentation | ≥ 99% similarity |
+| NFR-1.2 | Code generation correctness (compilable/runnable without errors) | ≥ 95% |
+| NFR-1.3 | API endpoint accuracy (correct URLs, methods, parameters) | ≥ 99% |
+
+### NFR-2: Performance
+
+| ID | Requirement | Target |
+|----|-------------|--------|
+| NFR-2.1 | Simple query response time (no web search needed) | < 10 seconds |
+| NFR-2.2 | Standard query response time (1-2 web searches) | < 30 seconds |
+| NFR-2.3 | Complex research query response time (multi-step search) | < 60 seconds |
+| NFR-2.4 | UI page load time | < 3 seconds |
+
+### NFR-3: Extensibility
+
+| ID | Requirement |
+|----|-------------|
+| NFR-3.1 | Plugin architecture for adding new LLM providers without core changes |
+| NFR-3.2 | Tool system allowing new tools to be registered dynamically |
+| NFR-3.3 | Prompt templates externalized for easy customization |
+| NFR-3.4 | Agent types extensible — new specialist agents can be added |
+
+### NFR-4: Configuration
+
+| ID | Requirement |
+|----|-------------|
+| NFR-4.1 | Environment variables via `.env` file for secrets (API keys) |
+| NFR-4.2 | Application config via `config.yaml` for non-secret settings |
+| NFR-4.3 | CLI flags override config file values |
+| NFR-4.4 | Sensible defaults for all configuration options |
+
+### NFR-5: Observability
+
+| ID | Requirement |
+|----|-------------|
+| NFR-5.1 | Structured logging (JSON format) with configurable log levels |
+| NFR-5.2 | Token usage tracking per request (prompt tokens, completion tokens, cost) |
+| NFR-5.3 | Request/response latency metrics |
+| NFR-5.4 | Agent reasoning trace logging for debugging |
+
+### NFR-6: Reliability
+
+| ID | Requirement |
+|----|-------------|
+| NFR-6.1 | Graceful error handling — never crash on bad input |
+| NFR-6.2 | LLM provider failover — automatic fallback on API errors |
+| NFR-6.3 | Rate limiting awareness — respect API rate limits with backoff |
+| NFR-6.4 | Timeout handling for web searches and LLM calls |
+
+---
+
+## 4. Technology Stack
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Language | Python 3.11+ | Core implementation language |
+| Agent Framework | Claude Agent SDK (`claude_agent_sdk`) | Agent loop, tool execution, ReAct pattern |
+| Multi-LLM Gateway | LiteLLM | Unified API for 100+ LLM models |
+| CLI Framework | Click + Rich | Command-line interface with rich output |
+| Web UI | Streamlit | Web-based chat interface |
+| Web Search | WebSearch / WebFetch (Claude Agent SDK tools) | Real-time web search |
+| Configuration | python-dotenv + PyYAML | Environment and app configuration |
+| HTTP Client | httpx | Async HTTP requests for API calls |
+| Testing | pytest + pytest-asyncio | Unit and integration testing |
+| Logging | structlog | Structured logging |
+| Packaging | pyproject.toml + pip | Python package management |
+
+---
+
+## 5. Constraints & Assumptions
+
+### Constraints
+- LLM API keys must be provided by the user (not bundled)
+- Web search quality depends on SailPoint documentation availability and indexing
+- Token costs are borne by the user based on their LLM provider pricing
+- Offline mode is not supported (requires internet for web search and LLM APIs)
+
+### Assumptions
+- Users have Python 3.11+ installed
+- Users have valid API keys for at least one supported LLM provider
+- SailPoint documentation websites remain publicly accessible
+- Users have basic familiarity with SailPoint products and IAM concepts
+
+---
+
+## 6. Glossary
+
+| Term | Definition |
+|------|------------|
+| **IIQ** | SailPoint IdentityIQ — on-premise identity governance platform |
+| **IDN** | SailPoint IdentityNow — cloud-based identity platform (now ISC) |
+| **ISC** | SailPoint Identity Security Cloud — rebranded IdentityNow |
+| **ReAct** | Reasoning + Acting — agent pattern that interleaves thinking and tool use |
+| **BeanShell** | Java-based scripting language used in IdentityIQ rules |
+| **SCIM** | System for Cross-domain Identity Management — REST API standard |
+| **SOD** | Segregation of Duties — compliance control preventing conflicting access |
+| **HLD** | High-Level Design — architecture-level technical document |
+| **LLD** | Low-Level Design — implementation-level technical document |
+| **LLM** | Large Language Model — AI model used as the agent's reasoning engine |
