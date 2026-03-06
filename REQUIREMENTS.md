@@ -160,6 +160,32 @@ Each agent in the system is a **multi-specialized SailPoint and IAM domain exper
 
 > **Design Principle:** The orchestrator routes queries to agents not because they have narrow specializations, but to enable parallel processing, context isolation, and workload distribution. Any agent can handle any SailPoint/IAM task.
 
+### FR-8B: Skills System
+
+Agents use a **Skills system** (filesystem-based `.claude/skills/*.md` files) that provides structured instructions, templates, and domain knowledge for specific task types. Skills are automatically invoked by agents when relevant.
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-8B.1 | Skills defined as markdown files in `.claude/skills/` directory | Must |
+| FR-8B.2 | Each Skill provides structured instructions, response templates, and domain knowledge for a specific task type | Must |
+| FR-8B.3 | Agents autonomously invoke relevant Skills based on query classification | Must |
+| FR-8B.4 | Multiple Skills can be chained within a single agent interaction | Should |
+| FR-8B.5 | Skills extensible — new Skills added by creating new `.md` files without code changes | Must |
+| FR-8B.6 | Built-in Skills for: research, code generation, test case creation, HLD, LLD, troubleshooting, IAM advisory, technical design | Must |
+
+**Skill Files:**
+
+| Skill | File | Trigger |
+|-------|------|---------|
+| SailPoint Research | `sailpoint-research.md` | Questions about features, concepts, configurations |
+| Code Generation | `code-generation.md` | Requests for BeanShell, Java, XML, REST, PowerShell code |
+| Test Case Creation | `test-case-creation.md` | Requests for test cases, test scenarios, test plans |
+| HLD Design | `hld-design.md` | Requests for high-level architecture design |
+| LLD Design | `lld-design.md` | Requests for low-level implementation design |
+| Troubleshooting | `troubleshooting.md` | Debug, diagnose, fix, resolve SailPoint issues |
+| IAM Advisory | `iam-advisory.md` | IAM strategy, compliance, RBAC, SOD, zero-trust |
+| Technical Design | `technical-design.md` | Connector, workflow, provisioning, integration designs |
+
 ### FR-9: Multi-LLM Support
 
 | ID | Requirement | Priority |
@@ -248,7 +274,7 @@ Each agent in the system is a **multi-specialized SailPoint and IAM domain exper
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | Language | Python 3.11+ | Core implementation language |
-| Agent Framework | Claude Agent SDK (`claude_agent_sdk`) | Agent loop, tool execution, ReAct pattern |
+| Agent Framework | Claude Agent SDK (`claude_agent_sdk`) | Agentic ReAct loop, tool execution, subagent orchestration (Task), Skills, MCP server support |
 | Multi-LLM Gateway | LiteLLM | Unified API for 100+ LLM models |
 | CLI Framework | Click + Rich | Command-line interface with rich output |
 | Web UI | Streamlit | Web-based chat interface |

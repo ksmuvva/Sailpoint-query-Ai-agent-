@@ -11,7 +11,8 @@
 - **Name:** SailPoint Query AI Agent
 - **Purpose:** An intelligent assistant that answers questions about SailPoint identity governance products, generates code, creates test cases, and produces technical design documents.
 - **Domain:** Identity and Access Management (IAM), specifically SailPoint IdentityIQ, IdentityNow, and Identity Security Cloud.
-- **Architecture:** Multi-agent system with **multi-specialized agents** — each agent is a full SailPoint and IAM domain expert capable of problem solving, explaining, coding, design, test creation, HLD, LLD, and IAM advisory. Uses the ReAct (Reasoning + Acting) pattern, built with the Claude Agent SDK, supporting multiple LLM backends.
+- **Architecture:** Multi-agent system with **multi-specialized agents** — each agent is a full SailPoint and IAM domain expert capable of problem solving, explaining, coding, design, test creation, HLD, LLD, and IAM advisory. Built on the **Claude Agent SDK** which provides the native agentic ReAct loop, tool execution, subagent orchestration (via `Task` tool + `AgentDefinition`), and Skills system. Supports multiple LLM backends via LiteLLM bridge.
+- **SDK Components Used:** `query()` (stateless), `ClaudeSDKClient` (stateful), `AgentDefinition` (subagents), `@tool` + `create_sdk_mcp_server()` (custom tools), `.claude/skills/*.md` (Skills)
 - **Interfaces:** CLI (Click + Rich) and Web UI (Streamlit).
 
 ---
@@ -373,7 +374,38 @@ When answering questions, search these sources in priority order:
 
 ---
 
-## 7. Common SailPoint Patterns & Code Snippets
+## 7. Skills System
+
+Agents use **Skills** — filesystem-based markdown files in `.claude/skills/` — to provide structured instructions, templates, and domain knowledge for specific task types. Skills are automatically invoked by the Claude Agent SDK when relevant to the user's query.
+
+### Available Skills
+
+| Skill | File | When Invoked |
+|-------|------|-------------|
+| **SailPoint Research** | `sailpoint-research.md` | Questions about SailPoint features, concepts, configurations |
+| **Code Generation** | `code-generation.md` | Requests for BeanShell, Java, XML, REST API, PowerShell code |
+| **Test Case Creation** | `test-case-creation.md` | Requests for test cases, test scenarios, test plans |
+| **HLD Design** | `hld-design.md` | High-level architecture design requests |
+| **LLD Design** | `lld-design.md` | Low-level implementation design requests |
+| **Troubleshooting** | `troubleshooting.md` | Debug, diagnose, fix, resolve SailPoint issues |
+| **IAM Advisory** | `iam-advisory.md` | IAM strategy, compliance, RBAC, SOD, zero-trust guidance |
+| **Technical Design** | `technical-design.md` | Connector, workflow, provisioning, integration design docs |
+
+### How Skills Work with the SDK
+
+1. Skills are enabled via `"Skill"` in `allowed_tools` and `setting_sources=["project"]`
+2. The Claude Agent SDK loads Skills from `.claude/skills/` directory
+3. Agents autonomously invoke relevant Skills based on the user's query
+4. Skills provide response templates, quality standards, and domain-specific instructions
+5. Multiple Skills can be chained in a single interaction (e.g., code generation + test creation)
+
+### Adding New Skills
+
+Create a new `.md` file in `.claude/skills/` — no code changes required. The SDK will automatically make it available to all agents.
+
+---
+
+## 8. Common SailPoint Patterns & Code Snippets
 
 ### 7.1 IIQ BeanShell — Get Identity by Name
 
@@ -454,7 +486,7 @@ identities = response.json()
 
 ---
 
-## 8. Version History
+## 9. Version History
 
 | Version | Date | Changes |
 |---------|------|---------|

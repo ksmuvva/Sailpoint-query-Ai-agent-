@@ -23,29 +23,27 @@
              │                                    │
              ▼                                    ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     ORCHESTRATOR AGENT                              │
+│              CLAUDE AGENT SDK (query / ClaudeSDKClient)             │
 │                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Meta-ReAct Loop                                             │   │
-│  │  1. THINK: Analyze query complexity & parallelism needs      │   │
-│  │  2. ACT:   Delegate to multi-specialized agent(s)            │   │
-│  │  3. OBSERVE: Collect agent responses                         │   │
-│  │  4. SYNTHESIZE: Aggregate into final response                │   │
+│  │  SDK-Managed Agentic Loop (ReAct)                            │   │
+│  │  1. THINK: Claude reasons about query (via system prompt)    │   │
+│  │  2. ACT:   Claude invokes tools or delegates to subagents    │   │
+│  │  3. OBSERVE: SDK feeds tool results back to Claude           │   │
+│  │  4. REPEAT: Until Claude provides final answer               │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                     │
 │  ┌────────────────────────────────────────────────────────────┐     │
-│  │          MULTI-SPECIALIZED AGENT POOL                      │     │
-│  │   Each agent is a full SailPoint + IAM domain expert       │     │
+│  │   MULTI-SPECIALIZED SUBAGENTS (via Task tool + AgentDef)   │     │
+│  │   Each subagent is a full SailPoint + IAM domain expert    │     │
 │  │                                                            │     │
 │  │   Capabilities per agent:                                  │     │
 │  │   • Problem Solving & Troubleshooting                      │     │
 │  │   • Explaining & Teaching                                  │     │
 │  │   • Code Generation (BeanShell, Java, XML, REST, etc.)     │     │
 │  │   • Test Case Creation (Unit, Integration, UAT, E2E)       │     │
-│  │   • High-Level Design (HLD)                                │     │
-│  │   • Low-Level Design (LLD)                                 │     │
-│  │   • Technical Design Documents                             │     │
-│  │   • IAM Domain Advisory                                    │     │
+│  │   • High-Level Design (HLD) & Low-Level Design (LLD)       │     │
+│  │   • Technical Design Documents & IAM Domain Advisory        │     │
 │  │                                                            │     │
 │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │     │
 │  │  │ Agent A  │ │ Agent B  │ │ Agent C  │ │ Agent D  │     │     │
@@ -54,26 +52,41 @@
 │  │  └─────┬────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘     │     │
 │  └────────┼────────────┼────────────┼────────────┼───────────┘     │
 │           │            │            │            │                  │
+│  ┌────────┼────────────┼────────────┼────────────┼───────────┐     │
+│  │                    SKILLS LAYER                            │     │
+│  │  .claude/skills/*.md — Invoked automatically by agents     │     │
+│  │                                                            │     │
+│  │  ┌─────────────┐ ┌──────────────┐ ┌────────────────┐     │     │
+│  │  │ sailpoint-  │ │ code-gen     │ │ test-design    │     │     │
+│  │  │ research    │ │              │ │                │     │     │
+│  │  └─────────────┘ └──────────────┘ └────────────────┘     │     │
+│  └───────────────────────────────────────────────────────────┘     │
+│                                                                     │
 └───────────┼────────────┼────────────┼────────────┼─────────────────┘
             │            │            │            │
             ▼            ▼            ▼            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                       SHARED TOOLS LAYER                            │
-│  (All agents have equal access to all tools)                        │
+│                    TOOLS LAYER (MCP Servers)                        │
+│  Custom tools via create_sdk_mcp_server() + @tool decorator        │
+│  Built-in tools: WebSearch, WebFetch, Read, Write, Bash, etc.      │
 │                                                                     │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐               │
 │  │ SailPoint    │ │ API          │ │ Doc          │               │
 │  │ Web Search   │ │ Lookup       │ │ Retriever    │               │
+│  │ (MCP tool)   │ │ (MCP tool)   │ │ (MCP tool)   │               │
 │  └──────────────┘ └──────────────┘ └──────────────┘               │
 └─────────────────────────────────────────────────────────────────────┘
             │              │                │
             ▼              ▼                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      LLM PROVIDER LAYER                            │
+│  Claude Agent SDK (native) — for Claude models                     │
+│  LiteLLM bridge — for OpenAI, GLM, and other LLM backends         │
 │                                                                     │
 │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐  │
 │  │  Claude     │  │  OpenAI    │  │  GLM       │  │  LiteLLM   │  │
-│  │  Provider   │  │  Provider  │  │  Provider  │  │  (any LLM) │  │
+│  │  (SDK-      │  │  (via      │  │  (via      │  │  (any LLM) │  │
+│  │   native)   │  │  LiteLLM)  │  │  LiteLLM)  │  │            │  │
 │  └────────────┘  └────────────┘  └────────────┘  └────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -114,59 +127,60 @@ sailpoint-query-ai-agent/
 ├── REQUIREMENTS.md
 ├── DESIGN.md
 ├── CONTEXT.md
+├── .mcp.json                        # MCP server configuration for Claude Agent SDK
+│
+├── .claude/
+│   ├── CLAUDE.md                    # Project context file for Claude Agent SDK
+│   │
+│   └── skills/                      # Skills directory (filesystem-based, Claude-like)
+│       ├── sailpoint-research.md    # Skill: Search & synthesize SailPoint documentation
+│       ├── code-generation.md       # Skill: Generate SailPoint code (BeanShell, Java, XML, etc.)
+│       ├── test-case-creation.md    # Skill: Generate structured test cases
+│       ├── hld-design.md            # Skill: Generate High-Level Design documents
+│       ├── lld-design.md            # Skill: Generate Low-Level Design documents
+│       ├── troubleshooting.md       # Skill: Diagnose and resolve SailPoint issues
+│       ├── iam-advisory.md          # Skill: IAM strategy and compliance guidance
+│       └── technical-design.md      # Skill: Generate connector/workflow/integration designs
 │
 ├── sailpoint_agent/
 │   ├── __init__.py                  # Package version, exports
-│   ├── main.py                      # Entry point: parse args, bootstrap, run
+│   ├── main.py                      # Entry point: bootstrap SDK, configure agents, run
 │   │
 │   ├── cli/
 │   │   ├── __init__.py
 │   │   ├── app.py                   # Click CLI group & commands
-│   │   ├── repl.py                  # Interactive REPL session manager
+│   │   ├── repl.py                  # Interactive REPL session manager (uses ClaudeSDKClient)
 │   │   └── renderer.py             # Rich console markdown renderer
 │   │
 │   ├── ui/
 │   │   ├── __init__.py
-│   │   ├── streamlit_app.py         # Streamlit main app
+│   │   ├── streamlit_app.py         # Streamlit main app (uses ClaudeSDKClient)
 │   │   └── components.py           # Reusable UI components
 │   │
 │   ├── agents/
-│   │   ├── __init__.py              # Agent registry & exports
-│   │   ├── base.py                  # BaseAgent ABC with ReAct loop (multi-specialized)
-│   │   ├── orchestrator.py          # OrchestratorAgent (routes & coordinates)
-│   │   └── sailpoint_agent.py       # SailPointExpertAgent (multi-specialized: problem solving, explaining, coding, design, testing, HLD, LLD, IAM advisory)
+│   │   ├── __init__.py              # Agent definitions & registry
+│   │   └── definitions.py           # AgentDefinition configs for multi-specialized subagents
 │   │
 │   ├── tools/
-│   │   ├── __init__.py              # Tool registry
-│   │   ├── base.py                  # BaseTool ABC
-│   │   ├── web_search.py            # SailPointWebSearch tool
-│   │   ├── api_lookup.py            # SailPointAPILookup tool
-│   │   └── doc_retriever.py         # DocumentationRetriever tool
+│   │   ├── __init__.py              # Tool registry & MCP server factory
+│   │   ├── sailpoint_search.py      # @tool: SailPoint-scoped web search (MCP)
+│   │   ├── api_lookup.py            # @tool: SailPoint API endpoint lookup (MCP)
+│   │   └── doc_retriever.py         # @tool: Documentation page fetcher (MCP)
 │   │
 │   ├── llm/
 │   │   ├── __init__.py
-│   │   ├── base.py                  # LLMProvider ABC
-│   │   ├── factory.py               # LLMProviderFactory
-│   │   ├── claude_provider.py       # ClaudeProvider
-│   │   ├── openai_provider.py       # OpenAIProvider
-│   │   └── litellm_provider.py      # LiteLLMProvider (catch-all)
+│   │   └── provider_bridge.py       # LiteLLM bridge for non-Claude LLMs
 │   │
 │   ├── prompts/
 │   │   ├── __init__.py
-│   │   ├── system.py                # System prompts per agent type
-│   │   ├── react.py                 # ReAct format instructions
-│   │   └── sailpoint.py             # SailPoint domain knowledge prompt fragments
+│   │   ├── system.py                # Master system prompt with SailPoint expertise
+│   │   └── sailpoint_knowledge.py   # SailPoint domain knowledge fragments
 │   │
 │   ├── models/
 │   │   ├── __init__.py
-│   │   ├── query.py                 # UserQuery, QueryType, QueryContext
-│   │   ├── response.py              # AgentResponse, Citation, CodeBlock, ReasoningStep
+│   │   ├── query.py                 # UserQuery, QueryContext
+│   │   ├── response.py              # AgentResponse, Citation, CodeBlock
 │   │   └── config.py                # AppConfig, LLMConfig, AgentConfig dataclasses
-│   │
-│   ├── formatters/
-│   │   ├── __init__.py
-│   │   ├── response.py              # ResponseFormatter
-│   │   └── code.py                  # CodeFormatter
 │   │
 │   ├── config/
 │   │   ├── __init__.py
@@ -180,11 +194,10 @@ sailpoint-query-ai-agent/
 └── tests/
     ├── __init__.py
     ├── conftest.py                  # Shared fixtures
-    ├── test_orchestrator.py
-    ├── test_sailpoint_expert_agent.py  # Tests for the multi-specialized SailPointExpertAgent
-    ├── test_tools.py
-    ├── test_llm_providers.py
-    └── test_formatters.py
+    ├── test_agent_definitions.py    # Tests for agent definitions & SDK integration
+    ├── test_tools.py                # Tests for custom MCP tools
+    ├── test_skills.py               # Tests for skill file loading
+    └── test_llm_bridge.py           # Tests for LiteLLM provider bridge
 ```
 
 ---
@@ -374,698 +387,577 @@ class AppConfig:
 
 ---
 
-## 4. Agent Layer (Low-Level Design)
+## 4. Agent Layer — Built on Claude Agent SDK
 
-### 4.1 BaseAgent — `sailpoint_agent/agents/base.py`
+### 4.1 Key SDK Components Used
 
-```python
-from abc import ABC, abstractmethod
-from typing import AsyncIterator, Optional
-import time
+The Claude Agent SDK provides the agentic loop, tool execution, multi-agent orchestration, and Skills natively. **We do NOT implement a custom ReAct loop** — the SDK handles it automatically.
 
-from sailpoint_agent.llm.base import LLMProvider
-from sailpoint_agent.tools.base import BaseTool, ToolResult
-from sailpoint_agent.models.query import UserQuery
-from sailpoint_agent.models.response import AgentResponse, ReasoningStep
-from sailpoint_agent.models.config import AgentConfig
-from sailpoint_agent.utils.logger import get_logger
+| SDK Component | Our Usage |
+|--------------|-----------|
+| `query()` | Stateless single-query execution (CLI `query` command) |
+| `ClaudeSDKClient` | Stateful multi-turn conversations (CLI `chat`, Web UI) |
+| `AgentDefinition` | Define multi-specialized subagents for parallel execution via `Task` tool |
+| `@tool` + `create_sdk_mcp_server()` | Register custom SailPoint tools as in-process MCP servers |
+| `.claude/skills/*.md` | Filesystem-based Skills that agents invoke automatically |
+| `allowedTools` | Control which built-in + MCP + Skill tools are available |
+| `settingSources` | Load Skills and project context from `.claude/` directory |
 
-logger = get_logger(__name__)
+### 4.2 Agent Definitions — `sailpoint_agent/agents/definitions.py`
 
-
-class BaseAgent(ABC):
-    """Abstract base class for all agents. Implements the ReAct loop.
-
-    Each agent built from this base is a MULTI-SPECIALIZED SailPoint & IAM expert
-    capable of: problem solving, explaining, coding, test creation, HLD, LLD,
-    technical design, and IAM domain advisory. The orchestrator distributes work
-    across agents for parallelism and context isolation, not for specialization.
-    """
-
-    def __init__(
-        self,
-        name: str,
-        llm: LLMProvider,
-        tools: list[BaseTool],
-        system_prompt: str,
-        config: AgentConfig = AgentConfig(),
-    ):
-        self.name = name
-        self.llm = llm
-        self.tools = {tool.name: tool for tool in tools}
-        self.system_prompt = system_prompt
-        self.config = config
-        self.reasoning_trace: list[ReasoningStep] = []
-
-    async def run(self, query: UserQuery) -> AgentResponse:
-        """Execute the ReAct loop: Think → Act → Observe → Repeat/Answer."""
-        messages = self._build_initial_messages(query)
-        start_time = time.monotonic()
-        total_tokens = 0
-
-        for iteration in range(1, self.config.max_iterations + 1):
-            # THINK: Generate reasoning about current state
-            thought = await self.think(messages)
-            logger.info(f"[{self.name}] Step {iteration} - Think: {thought[:100]}...")
-
-            # Check if agent wants to give final answer
-            if self._is_final_answer(thought):
-                return self._build_response(
-                    answer=self._extract_answer(thought),
-                    start_time=start_time,
-                    total_tokens=total_tokens,
-                )
-
-            # ACT: Select and execute a tool
-            tool_name, tool_args = await self.select_tool(thought)
-            action_desc = f"{tool_name}({tool_args})"
-            logger.info(f"[{self.name}] Step {iteration} - Act: {action_desc}")
-
-            result = await self.act(tool_name, tool_args)
-            total_tokens += result.tokens_used
-
-            # OBSERVE: Process tool output
-            observation = await self.observe(result)
-            logger.info(f"[{self.name}] Step {iteration} - Observe: {observation[:100]}...")
-
-            # Record reasoning trace
-            self.reasoning_trace.append(ReasoningStep(
-                step_number=iteration,
-                thought=thought,
-                action=action_desc,
-                observation=observation,
-            ))
-
-            # Update message history for next iteration
-            messages.extend([
-                {"role": "assistant", "content": f"Thought: {thought}\nAction: {action_desc}"},
-                {"role": "user", "content": f"Observation: {observation}"},
-            ])
-
-        # Max iterations reached — synthesize best answer from collected info
-        return await self._synthesize_final(messages, start_time, total_tokens)
-
-    async def think(self, messages: list[dict]) -> str:
-        """Generate a reasoning step given current context."""
-        think_messages = messages + [
-            {"role": "user", "content": "Think step-by-step about what you know and what you still need to find out. If you have enough information, provide your FINAL ANSWER."}
-        ]
-        response = await self.llm.chat(think_messages)
-        return response.content
-
-    @abstractmethod
-    async def select_tool(self, thought: str) -> tuple[str, dict]:
-        """Given a thought, select the appropriate tool and arguments.
-        Returns (tool_name, tool_arguments_dict)."""
-        ...
-
-    async def act(self, tool_name: str, tool_args: dict) -> ToolResult:
-        """Execute the selected tool."""
-        if tool_name not in self.tools:
-            return ToolResult(
-                success=False,
-                output=f"Tool '{tool_name}' not found. Available: {list(self.tools.keys())}",
-            )
-        tool = self.tools[tool_name]
-        return await tool.execute(**tool_args)
-
-    async def observe(self, result: ToolResult) -> str:
-        """Process tool output into a text observation."""
-        if result.success:
-            return result.output[:2000]  # Truncate long outputs
-        return f"Tool execution failed: {result.error}"
-
-    def _build_initial_messages(self, query: UserQuery) -> list[dict]:
-        """Build the initial message list with system prompt and user query."""
-        return [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": query.text},
-        ]
-
-    def _is_final_answer(self, thought: str) -> bool:
-        """Check if the thought contains a final answer marker."""
-        return "FINAL ANSWER:" in thought.upper()
-
-    def _extract_answer(self, thought: str) -> str:
-        """Extract the final answer from a thought string."""
-        marker = "FINAL ANSWER:"
-        idx = thought.upper().find(marker)
-        if idx >= 0:
-            return thought[idx + len(marker):].strip()
-        return thought
-
-    def _build_response(
-        self, answer: str, start_time: float, total_tokens: int
-    ) -> AgentResponse:
-        """Construct an AgentResponse from the final answer."""
-        elapsed_ms = int((time.monotonic() - start_time) * 1000)
-        return AgentResponse(
-            answer=answer,
-            reasoning_trace=self.reasoning_trace,
-            tokens_used=total_tokens,
-            model_used=self.llm.model_name,
-            response_time_ms=elapsed_ms,
-        )
-
-    async def _synthesize_final(
-        self, messages: list[dict], start_time: float, total_tokens: int
-    ) -> AgentResponse:
-        """Synthesize a final answer when max iterations are reached."""
-        messages.append({
-            "role": "user",
-            "content": "You have reached the maximum number of research steps. Based on everything you have gathered so far, provide your FINAL ANSWER now.",
-        })
-        response = await self.llm.chat(messages)
-        return self._build_response(response.content, start_time, total_tokens)
-```
-
-### 4.2 OrchestratorAgent — `sailpoint_agent/agents/orchestrator.py`
+Multi-specialized subagents are defined using the SDK's `AgentDefinition`. Each subagent is a **full-stack SailPoint & IAM expert** — the orchestrator delegates to them for parallelism, not specialization.
 
 ```python
-from typing import Optional
+"""Multi-specialized SailPoint agent definitions for Claude Agent SDK.
 
-from sailpoint_agent.agents.base import BaseAgent
-from sailpoint_agent.llm.base import LLMProvider
-from sailpoint_agent.models.query import UserQuery, QueryType
-from sailpoint_agent.models.response import AgentResponse
-from sailpoint_agent.models.config import AgentConfig
-from sailpoint_agent.utils.logger import get_logger
+Each AgentDefinition creates a subagent (via the Task tool) that is a full
+SailPoint & IAM domain expert. All agents share the same system prompt,
+tools, and Skills — they are identical in capability. Multiple definitions
+exist for parallel execution and context isolation.
+"""
 
-logger = get_logger(__name__)
+from claude_agent_sdk import AgentDefinition
 
-COMPLEXITY_ANALYSIS_PROMPT = """You are a query analyzer for a SailPoint AI agent.
-Analyze the user's query and determine:
-1. COMPLEXITY: SIMPLE (single concern) or COMPOUND (multiple concerns needing parallel work)
-2. TASK_TYPES: List all task types present (comma-separated):
-   - RESEARCH: Questions about SailPoint IIQ, IDN, ISC, or IAM concepts
-   - CODE_GENERATION: Write BeanShell, Java, XML, JSON, PowerShell, or API code
-   - TEST_CASE: Create test cases or test scenarios
-   - DESIGN_HLD: High-level architecture design
-   - DESIGN_LLD: Low-level implementation design
-   - TROUBLESHOOTING: Debug or diagnose SailPoint issues
-   - EXPLANATION: Explain concepts, processes, or behaviors
-   - IAM_ADVISORY: IAM strategy, compliance, best practices advice
-   - GENERAL: Greetings, meta-questions, or unclear queries
-
-Respond in format:
-COMPLEXITY: <SIMPLE|COMPOUND>
-TASK_TYPES: <comma-separated list>"""
-
-
-class OrchestratorAgent:
-    """Coordinates multi-specialized agents for query processing.
-
-    Each agent in the pool is a FULL SailPoint & IAM domain expert capable of
-    problem solving, explaining, coding, design, test creation, HLD, LLD, and
-    IAM advisory. The orchestrator distributes work for parallelism and context
-    isolation, not because agents have narrow specializations.
-
-    Uses a meta-ReAct pattern:
-    1. THINK: Analyze query complexity and identify parallelism opportunities
-    2. ACT: Assign to one or more multi-specialized agents
-    3. OBSERVE: Collect agent responses
-    4. SYNTHESIZE: Aggregate into unified final response
-    """
-
-    def __init__(
-        self,
-        llm: LLMProvider,
-        agents: dict[str, BaseAgent],
-        config: AgentConfig = AgentConfig(),
-    ):
-        self.llm = llm
-        self.agent_pool = agents  # Pool of multi-specialized SailPointExpertAgents
-        self.config = config
-
-    async def analyze_query(self, query: UserQuery) -> dict:
-        """Analyze query complexity and identify task types.
-
-        Returns dict with 'complexity' (SIMPLE|COMPOUND) and 'task_types' list.
-        Any agent can handle any task type — this analysis is used for
-        parallelism decisions, not for routing to narrow specialists.
-        """
-        messages = [
-            {"role": "system", "content": COMPLEXITY_ANALYSIS_PROMPT},
-            {"role": "user", "content": query.text},
-        ]
-        response = await self.llm.chat(messages)
-        return self._parse_analysis(response.content)
-
-    def _get_available_agent(self) -> BaseAgent:
-        """Get the next available agent from the pool.
-
-        All agents are equally capable — selection is based on availability,
-        not specialization. Any agent can handle any SailPoint/IAM task.
-        """
-        # Simple round-robin; in production, check agent busy state
-        agents = list(self.agent_pool.values())
-        return agents[0]
-
-    async def run(self, query: UserQuery) -> AgentResponse:
-        """Execute the orchestration loop with multi-specialized agents."""
-        # Step 1: THINK — Analyze query complexity
-        analysis = await self.analyze_query(query)
-        logger.info(f"[Orchestrator] Analysis: {analysis}")
-
-        if analysis["complexity"] == "COMPOUND" and len(analysis["task_types"]) > 1:
-            # Step 2a: ACT — Distribute sub-tasks across multiple agents in parallel
-            # Each agent is fully capable of any task type
-            return await self._run_parallel(query, analysis["task_types"])
-        else:
-            # Step 2b: ACT — Assign to a single agent (any agent can handle it)
-            agent = self._get_available_agent()
-            logger.info(f"[Orchestrator] Assigning to: {agent.name}")
-
-            # Step 3: OBSERVE
-            response = await agent.run(query)
-            response.query_type = analysis["task_types"][0] if analysis["task_types"] else "general"
-            return response
-
-    async def _run_parallel(
-        self, query: UserQuery, task_types: list[str]
-    ) -> AgentResponse:
-        """Distribute compound queries across multiple multi-specialized agents.
-
-        Each agent handles a sub-task independently. All agents have full
-        SailPoint/IAM expertise — they are assigned by availability, not specialty.
-        """
-        import asyncio
-
-        agents = list(self.agent_pool.values())
-        tasks = []
-        for i, task_type in enumerate(task_types):
-            agent = agents[i % len(agents)]
-            sub_query = UserQuery(
-                text=f"[Focus on {task_type}]: {query.text}",
-                context=query.context,
-            )
-            tasks.append(agent.run(sub_query))
-            logger.info(f"[Orchestrator] Assigned {task_type} to {agent.name}")
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        return self._synthesize_results(results)
-
-    def _synthesize_results(self, results: list) -> AgentResponse:
-        """Combine results from multiple multi-specialized agents."""
-        combined_answer = []
-        all_citations = []
-        for result in results:
-            if isinstance(result, AgentResponse):
-                combined_answer.append(result.answer)
-                all_citations.extend(result.citations)
-        return AgentResponse(
-            answer="\n\n---\n\n".join(combined_answer),
-            citations=all_citations,
-        )
-
-    def _parse_analysis(self, content: str) -> dict:
-        """Parse complexity analysis response."""
-        lines = content.strip().split("\n")
-        complexity = "SIMPLE"
-        task_types = ["RESEARCH"]
-        for line in lines:
-            if line.startswith("COMPLEXITY:"):
-                complexity = line.split(":", 1)[1].strip()
-            elif line.startswith("TASK_TYPES:"):
-                task_types = [t.strip() for t in line.split(":", 1)[1].split(",")]
-        return {"complexity": complexity, "task_types": task_types}
-```
-
-### 4.3 SailPointExpertAgent — `sailpoint_agent/agents/sailpoint_agent.py`
-
-This is the **single multi-specialized agent class** used by all agents in the pool. Every instance has the full range of SailPoint and IAM capabilities.
-
-```python
-from sailpoint_agent.agents.base import BaseAgent
-from sailpoint_agent.llm.base import LLMProvider
-from sailpoint_agent.tools.base import BaseTool
-from sailpoint_agent.models.config import AgentConfig
-from sailpoint_agent.models.response import CodeBlock
 from sailpoint_agent.prompts.system import SAILPOINT_EXPERT_PROMPT
 
 
-class SailPointExpertAgent(BaseAgent):
-    """Multi-specialized SailPoint and IAM domain expert agent.
+# All custom MCP tools available to every agent
+SAILPOINT_TOOLS = [
+    "WebSearch",                                    # SDK built-in: web search
+    "WebFetch",                                     # SDK built-in: fetch page content
+    "Skill",                                        # SDK built-in: invoke Skills
+    "mcp__sailpoint-tools__sailpoint_web_search",   # Custom: SailPoint-scoped search
+    "mcp__sailpoint-tools__api_lookup",             # Custom: API endpoint lookup
+    "mcp__sailpoint-tools__doc_retriever",          # Custom: Documentation page fetcher
+]
 
-    Unlike narrow specialist agents, this agent is capable of ALL SailPoint tasks:
-    - Problem solving & troubleshooting (debug rules, diagnose provisioning, fix connectors)
-    - Explaining & teaching (concepts, architectures, APIs, workflows at any depth)
-    - Code generation (BeanShell, Java, XML, REST API, PowerShell, ISC Transforms, Cloud Rules)
-    - Test case creation (unit, integration, UAT, E2E, SOD validation, regression)
-    - High-Level Design (HLD) (system topology, integration patterns, deployment strategy)
-    - Low-Level Design (LLD) (class/module design, config specs, API contracts, data models)
-    - Technical design documents (connector specs, workflow designs, provisioning plans)
-    - IAM domain advisory (RBAC/ABAC strategy, SOD, JML lifecycle, compliance, zero-trust)
 
-    The orchestrator creates multiple instances of this agent for parallelism and
-    context isolation, not because they have different capabilities.
+def create_sailpoint_agents() -> dict[str, AgentDefinition]:
+    """Create pool of multi-specialized SailPoint expert subagents.
 
-    Tools: sailpoint_web_search, doc_retriever, api_lookup (all tools available to all agents)
+    Each agent is identically capable of ALL SailPoint/IAM tasks:
+    - Problem solving & troubleshooting
+    - Explaining & teaching
+    - Code generation (BeanShell, Java, XML, REST, PowerShell, Transforms)
+    - Test case creation (unit, integration, UAT, E2E, SOD)
+    - High-Level Design (HLD) & Low-Level Design (LLD)
+    - Technical design documents
+    - IAM domain advisory (RBAC, ABAC, SOD, JML, compliance)
+
+    Multiple instances exist for parallelism and context isolation.
     """
-
-    def __init__(
-        self,
-        name: str,
-        llm: LLMProvider,
-        tools: list[BaseTool],
-        config: AgentConfig = AgentConfig(),
-    ):
-        super().__init__(
-            name=name,
-            llm=llm,
-            tools=tools,
-            system_prompt=SAILPOINT_EXPERT_PROMPT,
-            config=config,
-        )
-
-    async def select_tool(self, thought: str) -> tuple[str, dict]:
-        """Intelligently select the best tool based on current reasoning.
-
-        This agent has access to ALL tools and uses LLM-based tool selection
-        to pick the optimal tool for any task type.
-
-        Decision logic:
-        - If thought mentions needing to search → sailpoint_web_search
-        - If thought mentions a specific URL → doc_retriever
-        - If thought mentions API endpoint details → api_lookup
-        - For any task (code, test, design, troubleshooting) → search first, then synthesize
-        """
-        messages = [
-            {"role": "system", "content": self._tool_selection_prompt()},
-            {"role": "user", "content": f"Based on this reasoning, select a tool:\n{thought}"},
-        ]
-        response = await self.llm.chat(messages, tools=self._tool_schemas())
-        return self._parse_tool_call(response)
-
-    def _tool_selection_prompt(self) -> str:
-        tool_descriptions = "\n".join(
-            f"- {name}: {tool.description}" for name, tool in self.tools.items()
-        )
-        return f"""You are a multi-specialized SailPoint expert selecting the best tool.
-You can handle ANY task: research, coding, testing, design, troubleshooting, or advisory.
-Select the most relevant tool for your current reasoning step.
-
-Available tools:
-{tool_descriptions}"""
-
-    def _tool_schemas(self) -> list[dict]:
-        """Convert tools to LLM function-calling schema format."""
-        return [tool.to_schema() for tool in self.tools.values()]
-
-    def _parse_tool_call(self, response) -> tuple[str, dict]:
-        """Extract tool name and arguments from LLM response."""
-        if response.tool_calls:
-            call = response.tool_calls[0]
-            return call.name, call.arguments
-        # Fallback: default to web search
-        return "sailpoint_web_search", {"query": "SailPoint documentation"}
-
-    def _parse_code_blocks(self, text: str) -> list[CodeBlock]:
-        """Extract code blocks from response text (used for any task that includes code)."""
-        blocks = []
-        parts = text.split("```")
-        for i in range(1, len(parts), 2):
-            block = parts[i]
-            lines = block.split("\n", 1)
-            language = lines[0].strip() if lines else "text"
-            code = lines[1] if len(lines) > 1 else block
-            blocks.append(CodeBlock(
-                code=code.strip(),
-                language=language or "text",
-                description="",
-            ))
-        return blocks
+    return {
+        "sailpoint-expert-alpha": AgentDefinition(
+            description="Multi-specialized SailPoint & IAM expert (Alpha). "
+                        "Handles any task: research, coding, testing, design, "
+                        "troubleshooting, HLD, LLD, and IAM advisory.",
+            prompt=SAILPOINT_EXPERT_PROMPT,
+            tools=SAILPOINT_TOOLS,
+        ),
+        "sailpoint-expert-beta": AgentDefinition(
+            description="Multi-specialized SailPoint & IAM expert (Beta). "
+                        "Handles any task: research, coding, testing, design, "
+                        "troubleshooting, HLD, LLD, and IAM advisory.",
+            prompt=SAILPOINT_EXPERT_PROMPT,
+            tools=SAILPOINT_TOOLS,
+        ),
+        "sailpoint-expert-gamma": AgentDefinition(
+            description="Multi-specialized SailPoint & IAM expert (Gamma). "
+                        "Handles any task: research, coding, testing, design, "
+                        "troubleshooting, HLD, LLD, and IAM advisory.",
+            prompt=SAILPOINT_EXPERT_PROMPT,
+            tools=SAILPOINT_TOOLS,
+        ),
+        "sailpoint-expert-delta": AgentDefinition(
+            description="Multi-specialized SailPoint & IAM expert (Delta). "
+                        "Handles any task: research, coding, testing, design, "
+                        "troubleshooting, HLD, LLD, and IAM advisory.",
+            prompt=SAILPOINT_EXPERT_PROMPT,
+            tools=SAILPOINT_TOOLS,
+        ),
+    }
 ```
+
+### 4.3 SDK Integration — `sailpoint_agent/main.py`
+
+The main entry point bootstraps the Claude Agent SDK with custom tools, subagents, and Skills.
+
+```python
+"""Main entry point for the SailPoint Query AI Agent.
+
+Uses the Claude Agent SDK's native agentic loop (ReAct pattern).
+The SDK handles: reasoning, tool selection, tool execution, observation,
+iteration, and final answer synthesis — no custom loop needed.
+"""
+
+import os
+import asyncio
+from claude_agent_sdk import query, ClaudeSDKClient, ClaudeAgentOptions
+
+from sailpoint_agent.agents.definitions import create_sailpoint_agents
+from sailpoint_agent.tools import create_sailpoint_mcp_server
+from sailpoint_agent.config.settings import load_config
+
+
+def build_sdk_options(app_config) -> ClaudeAgentOptions:
+    """Build Claude Agent SDK options with SailPoint tools, agents, and Skills."""
+
+    sailpoint_mcp = create_sailpoint_mcp_server(app_config.search)
+    sailpoint_agents = create_sailpoint_agents()
+
+    return ClaudeAgentOptions(
+        # Custom SailPoint tools via in-process MCP server
+        mcp_servers={
+            "sailpoint-tools": sailpoint_mcp,
+        },
+
+        # Built-in SDK tools + custom MCP tools + Skills
+        allowed_tools=[
+            "WebSearch",                                    # SDK: web search
+            "WebFetch",                                     # SDK: fetch pages
+            "Skill",                                        # SDK: invoke Skills
+            "Task",                                         # SDK: delegate to subagents
+            "mcp__sailpoint-tools__sailpoint_web_search",   # Custom: SailPoint search
+            "mcp__sailpoint-tools__api_lookup",             # Custom: API lookup
+            "mcp__sailpoint-tools__doc_retriever",          # Custom: doc fetcher
+        ],
+
+        # Multi-specialized subagents (all equally capable)
+        agents=sailpoint_agents,
+
+        # Load Skills from .claude/skills/ and project context from .claude/CLAUDE.md
+        setting_sources=["project"],
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+
+        # Execution limits
+        max_turns=10,
+        permission_mode="default",
+    )
+
+
+async def run_single_query(question: str, app_config) -> str:
+    """Execute a single query using the SDK's stateless query() function.
+
+    The SDK manages the entire ReAct loop:
+    1. Claude receives the question + system prompt + SailPoint knowledge
+    2. Claude reasons about what tools/skills to use
+    3. SDK executes tools and feeds results back
+    4. Claude iterates until it has a complete answer
+    5. Final result is streamed back
+    """
+    options = build_sdk_options(app_config)
+
+    result_text = ""
+    async for message in query(prompt=question, options=options):
+        if message.type == "assistant":
+            for block in message.content:
+                if hasattr(block, "text"):
+                    result_text += block.text
+        if message.type == "result" and message.subtype == "success":
+            result_text = message.result
+    return result_text
+
+
+async def run_interactive_session(app_config):
+    """Run interactive multi-turn session using ClaudeSDKClient.
+
+    Each exchange maintains conversation context for follow-up questions.
+    """
+    options = build_sdk_options(app_config)
+
+    async with ClaudeSDKClient(options=options) as client:
+        while True:
+            user_input = input("\nYou: ").strip()
+            if user_input in ("/quit", "/exit", "/q"):
+                break
+
+            await client.query(user_input)
+            async for message in client.receive_response():
+                if message.type == "assistant":
+                    for block in message.content:
+                        if hasattr(block, "text"):
+                            print(block.text, end="", flush=True)
+            print()  # newline after response
+```
+
+### 4.4 How the SDK Manages the ReAct Loop
+
+**We do NOT implement a custom ReAct loop.** The Claude Agent SDK handles it automatically:
+
+```
+User submits query
+        │
+        ▼
+┌─── SDK query() / ClaudeSDKClient.query() ───┐
+│                                               │
+│  1. Send system prompt + user query to Claude │
+│  2. Claude THINKS and decides next action     │
+│  3. If Claude calls a tool:                   │
+│     → SDK executes the tool automatically     │
+│     → SDK feeds result back to Claude         │
+│     → Go to step 2                            │
+│  4. If Claude delegates to a subagent (Task): │
+│     → SDK spawns subagent with AgentDef       │
+│     → Subagent runs its own ReAct loop        │
+│     → Result returned to parent agent         │
+│     → Go to step 2                            │
+│  5. If Claude invokes a Skill:                │
+│     → SDK loads .claude/skills/<name>.md      │
+│     → Skill instructions shape Claude's work  │
+│     → Go to step 2                            │
+│  6. If Claude is done → return final answer   │
+│                                               │
+└───────────────────────────────────────────────┘
+```
+
+The ReAct behavior is controlled via the **system prompt** (Section 9), which instructs Claude to:
+- Think step-by-step before acting
+- Use SailPoint-specific tools for research
+- Cite sources with URLs
+- Follow structured response templates
+- Invoke appropriate Skills for specialized tasks
 
 ---
 
-## 5. Tools Layer (Low-Level Design)
+## 5. Tools Layer — MCP Servers via Claude Agent SDK
 
-### 5.1 BaseTool — `sailpoint_agent/tools/base.py`
+### 5.1 Tool Architecture
 
-```python
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Optional
+Custom tools are registered as **in-process MCP servers** using the SDK's `@tool` decorator and `create_sdk_mcp_server()`. The SDK also provides built-in tools (WebSearch, WebFetch) that agents use alongside custom tools.
 
+| Tool Type | Registration | Naming Convention |
+|-----------|-------------|-------------------|
+| **SDK Built-in** | Via `allowed_tools` list | `WebSearch`, `WebFetch`, `Skill`, `Task` |
+| **Custom MCP** | Via `@tool` + `create_sdk_mcp_server()` | `mcp__<server>__<tool>` |
+| **External MCP** | Via `.mcp.json` or `mcp_servers` config | `mcp__<server>__<tool>` |
 
-@dataclass
-class ToolResult:
-    """Result from tool execution."""
-    success: bool
-    output: str
-    error: Optional[str] = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-    tokens_used: int = 0
-
-
-class BaseTool(ABC):
-    """Abstract base class for all agent tools."""
-
-    name: str = ""
-    description: str = ""
-
-    @abstractmethod
-    async def execute(self, **kwargs) -> ToolResult:
-        """Execute the tool with given arguments."""
-        ...
-
-    def to_schema(self) -> dict:
-        """Convert tool to LLM function-calling schema."""
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self._parameters_schema(),
-            },
-        }
-
-    @abstractmethod
-    def _parameters_schema(self) -> dict:
-        """Return JSON Schema for tool parameters."""
-        ...
-```
-
-### 5.2 SailPointWebSearch — `sailpoint_agent/tools/web_search.py`
+### 5.2 Custom Tools — `sailpoint_agent/tools/__init__.py`
 
 ```python
-from sailpoint_agent.tools.base import BaseTool, ToolResult
+"""SailPoint custom tools registered as an in-process MCP server.
+
+Uses Claude Agent SDK's @tool decorator and create_sdk_mcp_server() to
+create tools that agents can invoke during their ReAct loop.
+"""
+
+from claude_agent_sdk import tool, create_sdk_mcp_server
 from sailpoint_agent.models.config import SearchConfig
 
 
-class SailPointWebSearch(BaseTool):
-    """Web search tool scoped to SailPoint and IAM documentation sources.
+SAILPOINT_DOMAINS = [
+    "developer.sailpoint.com",
+    "documentation.sailpoint.com",
+    "community.sailpoint.com",
+    "github.com/sailpoint-oss",
+]
 
-    Searches SailPoint domains first, then falls back to general web if configured.
-    Uses Claude Agent SDK WebSearch or a configurable search backend.
+API_DOCS = {
+    "iiq": "https://developer.sailpoint.com/docs/api/iiq/",
+    "isc": "https://developer.sailpoint.com/docs/api/v3/",
+}
+
+
+@tool(
+    "sailpoint_web_search",
+    "Search SailPoint documentation, developer portal, community forums, "
+    "and IAM resources. Prioritizes SailPoint official sources. Use for "
+    "finding official docs, code examples, API references, and community solutions.",
+    {
+        "query": str,               # Search query about SailPoint or IAM topics
+        "product": str,             # "iiq", "isc", or "both" (default: "both")
+    },
+)
+async def sailpoint_web_search(args: dict) -> dict:
+    """Search SailPoint-scoped domains with automatic query augmentation."""
+    import httpx
+
+    query = args["query"]
+    product = args.get("product", "both")
+
+    # Augment query with product-specific context
+    if product == "iiq":
+        query = f"SailPoint IdentityIQ {query}"
+    elif product == "isc":
+        query = f"SailPoint Identity Security Cloud ISC {query}"
+    else:
+        query = f"SailPoint {query}"
+
+    # Use httpx with a search API (Tavily, SerpAPI, or similar)
+    # Fallback: agent can also use SDK's built-in WebSearch tool
+    try:
+        async with httpx.AsyncClient() as client:
+            # Implementation depends on chosen search backend
+            results = await _execute_search(client, query, SAILPOINT_DOMAINS)
+            formatted = _format_results(results)
+            return {"content": [{"type": "text", "text": formatted}]}
+    except Exception as e:
+        return {"content": [{"type": "text", "text": f"Search failed: {e}. Try using WebSearch directly."}]}
+
+
+@tool(
+    "api_lookup",
+    "Look up SailPoint API endpoints, methods, parameters, and examples. "
+    "Covers IIQ SCIM APIs and ISC V3/v2025 APIs. Returns structured API documentation.",
+    {
+        "endpoint": str,            # API endpoint or operation name (e.g., "/v3/identities", "search")
+        "product": str,             # "iiq" or "isc" (default: "isc")
+    },
+)
+async def api_lookup(args: dict) -> dict:
+    """Fetch API documentation for specific SailPoint endpoints."""
+    import httpx
+
+    endpoint = args["endpoint"]
+    product = args.get("product", "isc")
+    base_url = API_DOCS.get(product, API_DOCS["isc"])
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{base_url}", follow_redirects=True, timeout=15)
+            # Parse and extract relevant API documentation
+            content = _extract_api_content(response.text, endpoint)
+            return {"content": [{"type": "text", "text": content}]}
+    except Exception as e:
+        return {"content": [{"type": "text", "text": f"API lookup failed: {e}"}]}
+
+
+@tool(
+    "doc_retriever",
+    "Fetch a specific SailPoint documentation page by URL and extract its content "
+    "as clean text. Use when you have a specific URL from search results and need "
+    "the full page content for detailed information.",
+    {
+        "url": str,                 # Full URL of the documentation page
+    },
+)
+async def doc_retriever(args: dict) -> dict:
+    """Fetch and parse a SailPoint documentation page."""
+    import httpx
+
+    url = args["url"]
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, follow_redirects=True, timeout=15)
+            # Convert HTML to clean markdown/text
+            content = _html_to_text(response.text)
+            return {
+                "content": [{"type": "text", "text": f"Content from {url}:\n\n{content[:5000]}"}]
+            }
+    except Exception as e:
+        return {"content": [{"type": "text", "text": f"Failed to fetch {url}: {e}"}]}
+
+
+def create_sailpoint_mcp_server(search_config: SearchConfig = SearchConfig()):
+    """Create the in-process MCP server with all SailPoint custom tools.
+
+    This server is passed to ClaudeAgentOptions.mcp_servers and makes
+    tools available as mcp__sailpoint-tools__<tool_name>.
     """
-
-    name = "sailpoint_web_search"
-    description = (
-        "Search SailPoint documentation, developer portal, community forums, "
-        "and IAM resources. Use for finding official docs, code examples, "
-        "API references, and community solutions."
+    return create_sdk_mcp_server(
+        name="sailpoint-tools",
+        version="1.0.0",
+        tools=[sailpoint_web_search, api_lookup, doc_retriever],
     )
 
-    SAILPOINT_DOMAINS = [
-        "developer.sailpoint.com",
-        "documentation.sailpoint.com",
-        "community.sailpoint.com",
-        "github.com/sailpoint-oss",
-    ]
 
-    def __init__(self, search_config: SearchConfig = SearchConfig()):
-        self.config = search_config
+# --- Helper functions ---
 
-    async def execute(
-        self,
-        query: str,
-        domains: list[str] | None = None,
-    ) -> ToolResult:
-        """Search for SailPoint-related content.
-
-        Args:
-            query: Search query string
-            domains: Optional domain filter (defaults to SAILPOINT_DOMAINS)
-        """
-        target_domains = domains or self.SAILPOINT_DOMAINS
-
-        try:
-            # Phase 1: Search SailPoint-scoped domains
-            results = await self._search(query, allowed_domains=target_domains)
-
-            # Phase 2: Fallback to general web if no results and configured
-            if not results and self.config.fallback_to_general_web:
-                results = await self._search(f"SailPoint {query}")
-
-            if not results:
-                return ToolResult(
-                    success=False,
-                    output="No results found.",
-                    error="No search results for query.",
-                )
-
-            formatted = self._format_results(results)
-            return ToolResult(success=True, output=formatted)
-
-        except Exception as e:
-            return ToolResult(success=False, output="", error=str(e))
-
-    async def _search(
-        self, query: str, allowed_domains: list[str] | None = None
-    ) -> list[dict]:
-        """Execute web search. Implementation delegates to search backend."""
-        # This will be implemented using Claude Agent SDK WebSearch tool
-        # or a pluggable search backend (SerpAPI, Tavily, etc.)
-        raise NotImplementedError("Implement with chosen search backend")
-
-    def _format_results(self, results: list[dict]) -> str:
-        """Format search results as readable text for the agent."""
-        lines = []
-        for i, r in enumerate(results, 1):
-            lines.append(f"[{i}] {r.get('title', 'No title')}")
-            lines.append(f"    URL: {r.get('url', '')}")
-            lines.append(f"    {r.get('snippet', '')}")
-            lines.append("")
-        return "\n".join(lines)
-
-    def _parameters_schema(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query about SailPoint or IAM topics",
-                },
-                "domains": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Optional list of domains to restrict search to",
-                },
-            },
-            "required": ["query"],
-        }
-```
-
-### 5.3 SailPointAPILookup — `sailpoint_agent/tools/api_lookup.py`
-
-```python
-from sailpoint_agent.tools.base import BaseTool, ToolResult
+async def _execute_search(client, query: str, domains: list[str]) -> list[dict]:
+    """Execute web search using configured backend."""
+    # Placeholder — implement with Tavily, SerpAPI, or similar
+    raise NotImplementedError("Implement with chosen search backend")
 
 
-class SailPointAPILookup(BaseTool):
-    """Look up SailPoint API endpoints and specifications.
-
-    Provides structured API information for IIQ SCIM APIs and ISC V3 APIs.
-    """
-
-    name = "api_lookup"
-    description = (
-        "Look up SailPoint API endpoints, methods, parameters, and examples. "
-        "Covers IIQ SCIM APIs and ISC V3 APIs."
-    )
-
-    API_DOCS = {
-        "iiq_scim": "https://developer.sailpoint.com/docs/api/iiq/",
-        "isc_v3": "https://developer.sailpoint.com/docs/api/v3/",
-    }
-
-    async def execute(self, query: str, product: str = "isc") -> ToolResult:
-        """Look up API documentation.
-
-        Args:
-            query: API endpoint or operation to look up
-            product: "iiq" or "isc" (default: "isc")
-        """
-        base_url = self.API_DOCS.get(f"{product}_scim" if product == "iiq" else f"{product}_v3")
-        if not base_url:
-            return ToolResult(success=False, output="", error=f"Unknown product: {product}")
-
-        # Fetch and parse API documentation page
-        try:
-            content = await self._fetch_api_docs(base_url, query)
-            return ToolResult(success=True, output=content)
-        except Exception as e:
-            return ToolResult(success=False, output="", error=str(e))
-
-    async def _fetch_api_docs(self, base_url: str, query: str) -> str:
-        """Fetch API docs from SailPoint developer portal."""
-        raise NotImplementedError("Implement with HTTP client")
-
-    def _parameters_schema(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "API endpoint or operation name to look up",
-                },
-                "product": {
-                    "type": "string",
-                    "enum": ["iiq", "isc"],
-                    "description": "SailPoint product (iiq or isc)",
-                },
-            },
-            "required": ["query"],
-        }
-```
-
-### 5.4 DocumentationRetriever — `sailpoint_agent/tools/doc_retriever.py`
-
-```python
-from sailpoint_agent.tools.base import BaseTool, ToolResult
+def _format_results(results: list[dict]) -> str:
+    """Format search results as readable text."""
+    lines = []
+    for i, r in enumerate(results, 1):
+        lines.append(f"[{i}] {r.get('title', 'No title')}")
+        lines.append(f"    URL: {r.get('url', '')}")
+        lines.append(f"    {r.get('snippet', '')}")
+        lines.append("")
+    return "\n".join(lines)
 
 
-class DocumentationRetriever(BaseTool):
-    """Fetch and parse a specific documentation page for detailed content."""
+def _extract_api_content(html: str, endpoint: str) -> str:
+    """Extract API documentation for a specific endpoint from HTML."""
+    # Placeholder — implement with BeautifulSoup
+    raise NotImplementedError("Implement with HTML parser")
 
-    name = "doc_retriever"
-    description = (
-        "Fetch a specific SailPoint documentation page by URL and extract "
-        "its content. Use when you have a specific URL from search results "
-        "and need the full page content."
-    )
 
-    async def execute(self, url: str) -> ToolResult:
-        """Fetch and parse a documentation page.
-
-        Args:
-            url: Full URL of the documentation page to fetch
-        """
-        try:
-            content = await self._fetch_and_parse(url)
-            return ToolResult(
-                success=True,
-                output=content,
-                metadata={"url": url},
-            )
-        except Exception as e:
-            return ToolResult(success=False, output="", error=str(e))
-
-    async def _fetch_and_parse(self, url: str) -> str:
-        """Fetch URL content and convert to clean text/markdown."""
-        # Implementation: use httpx to fetch, then html2text or similar to parse
-        raise NotImplementedError("Implement with HTTP client + HTML parser")
-
-    def _parameters_schema(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "URL of the documentation page to fetch",
-                },
-            },
-            "required": ["url"],
-        }
+def _html_to_text(html: str) -> str:
+    """Convert HTML to clean text/markdown."""
+    # Placeholder — implement with html2text or BeautifulSoup
+    raise NotImplementedError("Implement with HTML parser")
 ```
 
 ---
 
-## 6. LLM Provider Layer (Low-Level Design)
+## 6. Skills Layer — Filesystem-Based Agent Capabilities
 
-### 6.1 LLMProvider ABC — `sailpoint_agent/llm/base.py`
+### 6.1 Skills Architecture
+
+Skills are **filesystem-based capability definitions** stored as `.claude/skills/*.md` files. They follow the same pattern as Claude Code's built-in Skills. Each Skill is a markdown file that provides structured instructions, templates, and domain knowledge that agents automatically invoke when relevant.
+
+**How Skills Work:**
+1. Skills are `.md` files in `.claude/skills/` directory
+2. Enabled via `"Skill"` in `allowed_tools` and `setting_sources=["project"]`
+3. Agents autonomously invoke relevant Skills based on query type
+4. Skills provide structured prompts, templates, and response formatting rules
+5. Multiple Skills can be chained within a single agent interaction
+
+### 6.2 Skill Definitions
+
+Each Skill file follows this structure:
+
+```markdown
+# Skill Name
+Description: What this skill does and when to use it
+Trigger: When to automatically invoke this skill
+
+## Instructions
+[Detailed step-by-step instructions for the agent]
+
+## Templates
+[Output templates and formatting rules]
+
+## Domain Knowledge
+[Relevant SailPoint/IAM knowledge specific to this skill]
+```
+
+### 6.3 Skill Files
+
+| Skill File | Trigger Pattern | Capability |
+|-----------|----------------|------------|
+| `sailpoint-research.md` | Questions about SailPoint features, concepts, configurations | Search SailPoint docs, synthesize answers with citations |
+| `code-generation.md` | Requests for BeanShell, Java, XML, REST API, PowerShell code | Generate production-quality SailPoint code with comments and imports |
+| `test-case-creation.md` | Requests for test cases, test scenarios, test plans | Generate structured test cases (ID, Steps, Expected Result) |
+| `hld-design.md` | Requests for high-level design, architecture overview | Generate HLD documents with topology, integration patterns, security |
+| `lld-design.md` | Requests for low-level design, implementation specs | Generate LLD documents with class designs, API contracts, data models |
+| `troubleshooting.md` | Debug, diagnose, fix, resolve issues | Systematic troubleshooting with root cause analysis |
+| `iam-advisory.md` | IAM strategy, compliance, RBAC, SOD, zero-trust | Provide IAM best practices and compliance guidance |
+| `technical-design.md` | Connector, workflow, provisioning, integration designs | Generate technical design documents with detailed specs |
+
+### 6.4 Example Skill — `.claude/skills/code-generation.md`
+
+```markdown
+# SailPoint Code Generation
+
+Description: Generate production-quality code for SailPoint implementations
+Trigger: When the user asks to write, create, or generate code for SailPoint
+
+## Instructions
+
+When generating SailPoint code:
+
+1. **Identify the code type**: BeanShell rule, Java class, XML config, REST API call,
+   PowerShell script, ISC Transform JSON, Cloud Rule, or SaaS connector (TypeScript)
+2. **Search documentation first**: Use sailpoint_web_search to find relevant API signatures,
+   class names, and official examples before writing code
+3. **Determine product context**: Is this for IIQ (on-prem) or ISC (cloud)?
+   - IIQ: Use `sailpoint.object.*` classes, `SailPointContext`, BeanShell syntax
+   - ISC: Use V3 API endpoints, Transform JSON, Cloud Rule sandbox constraints
+4. **Generate the code** following these quality standards:
+   - Include all required imports explicitly
+   - Add inline comments explaining key logic
+   - Follow SailPoint naming conventions
+   - Handle null checks using `sailpoint.tools.Util` (IIQ) or null-safe patterns
+   - Include error handling for common failure scenarios
+5. **Provide usage instructions**: How to deploy, configure, and test the code
+
+## Response Template
+
+### [What the code does]
+[Brief explanation]
+
+### Prerequisites
+- [Required setup]
+
+### Code
+\`\`\`[language]
+[Generated code with inline comments]
+\`\`\`
+
+### Deployment Instructions
+1. [Step-by-step guide]
+
+### Testing
+- [How to verify it works]
+
+### Sources
+- [Documentation reference](URL)
+
+## IIQ Rule Types Reference
+- BuildMap Rule: transforms connector data during aggregation
+- Correlation Rule: matches accounts to identities
+- Creation Rule: sets defaults for new identities
+- IdentityAttribute Rule: calculates derived attributes
+- FieldValue Rule: dynamic provisioning form values
+- Certification Rule: customizes certification behavior
+- Before/After Provisioning Rule: pre/post provisioning logic
+```
+
+### 6.5 Example Skill — `.claude/skills/troubleshooting.md`
+
+```markdown
+# SailPoint Troubleshooting
+
+Description: Diagnose and resolve SailPoint configuration, provisioning, and connector issues
+Trigger: When the user asks to debug, diagnose, fix, troubleshoot, or resolve a SailPoint problem
+
+## Instructions
+
+1. **Gather context**: Ask clarifying questions if needed:
+   - Which product? (IIQ version or ISC)
+   - What operation is failing? (aggregation, provisioning, certification, etc.)
+   - What error message or behavior is observed?
+   - What was changed recently?
+
+2. **Search for known issues**: Use sailpoint_web_search to check:
+   - SailPoint community forums for similar issues
+   - SailPoint documentation for correct configuration
+   - Known bugs or workarounds for the version
+
+3. **Systematic diagnosis**:
+   - Check logs: `sailpoint.log`, `ccg.log`, connector logs
+   - Verify configuration: Application XML, Rule code, Workflow steps
+   - Test components in isolation
+   - Check for common pitfalls (null values, missing imports, incorrect filters)
+
+4. **Provide resolution**:
+   - Root cause explanation
+   - Step-by-step fix with code/config changes
+   - Verification steps to confirm the fix
+   - Prevention recommendations
+
+## Response Template
+
+### Issue: [Brief description]
+
+### Root Cause
+[Explanation of why this happens]
+
+### Resolution
+1. [Step-by-step fix]
+
+### Verification
+- [How to confirm the fix works]
+
+### Prevention
+- [Best practices to avoid this in the future]
+
+### Sources
+- [Reference](URL)
+```
+
+---
+
+## 7. LLM Provider Layer
+
+> **Key Design Decision:** When using Claude (the default and recommended path), the Claude Agent SDK handles everything natively — no custom LLM provider code is needed. For non-Claude LLMs (OpenAI, GLM, etc.), a LiteLLM bridge provides unified access. The custom `LLMProvider` ABC below is only used for the non-Claude path.
+
+### 7.1 LLMProvider ABC — `sailpoint_agent/llm/base.py`
 
 ```python
 from abc import ABC, abstractmethod
@@ -1116,7 +1008,7 @@ class LLMProvider(ABC):
         ...
 ```
 
-### 6.2 ClaudeProvider — `sailpoint_agent/llm/claude_provider.py`
+### 7.2 ClaudeProvider — `sailpoint_agent/llm/claude_provider.py`
 
 ```python
 import anthropic
@@ -1222,7 +1114,7 @@ class ClaudeProvider(LLMProvider):
         return calls
 ```
 
-### 6.3 OpenAIProvider — `sailpoint_agent/llm/openai_provider.py`
+### 7.3 OpenAIProvider — `sailpoint_agent/llm/openai_provider.py`
 
 ```python
 from openai import AsyncOpenAI
@@ -1297,7 +1189,7 @@ class OpenAIProvider(LLMProvider):
                 yield chunk.choices[0].delta.content
 ```
 
-### 6.4 LiteLLMProvider — `sailpoint_agent/llm/litellm_provider.py`
+### 7.4 LiteLLMProvider — `sailpoint_agent/llm/litellm_provider.py`
 
 ```python
 import litellm
@@ -1377,7 +1269,7 @@ class LiteLLMProvider(LLMProvider):
                 yield chunk.choices[0].delta.content
 ```
 
-### 6.5 LLMProviderFactory — `sailpoint_agent/llm/factory.py`
+### 7.5 LLMProviderFactory — `sailpoint_agent/llm/factory.py`
 
 ```python
 from sailpoint_agent.llm.base import LLMProvider
@@ -1421,19 +1313,26 @@ class LLMProviderFactory:
 
 ---
 
-## 7. CLI Interface (Low-Level Design)
+## 8. CLI Interface (Low-Level Design)
 
-### 7.1 CLI Application — `sailpoint_agent/cli/app.py`
+### 8.1 CLI Application — `sailpoint_agent/cli/app.py`
 
 ```python
+"""CLI interface using Claude Agent SDK for the agentic loop.
+
+Uses SDK's query() for single questions and ClaudeSDKClient for interactive chat.
+The SDK handles ReAct reasoning, tool execution, subagent delegation, and Skill
+invocation automatically.
+"""
+
 import asyncio
 import click
 from rich.console import Console
 
 from sailpoint_agent.config.settings import load_config
+from sailpoint_agent.main import build_sdk_options, run_single_query
 from sailpoint_agent.cli.renderer import render_response
 from sailpoint_agent.cli.repl import run_repl
-from sailpoint_agent.models.query import UserQuery, QueryContext
 
 console = Console()
 
@@ -1458,21 +1357,20 @@ def cli(ctx, model, verbose, config):
 @click.option("--output", "-o", default=None, help="Save response to file")
 @click.pass_context
 def query(ctx, question, output):
-    """Ask a single question about SailPoint."""
-    app_config = ctx.obj["config"]
-    verbose = ctx.obj["verbose"]
+    """Ask a single question about SailPoint.
 
-    user_query = UserQuery(
-        text=question,
-        context=QueryContext(include_traces=verbose),
-    )
+    Uses SDK's stateless query() — the SDK manages the full ReAct loop,
+    tool usage, Skill invocation, and subagent delegation automatically.
+    """
+    app_config = ctx.obj["config"]
 
     async def _run():
-        orchestrator = _build_orchestrator(app_config)
-        response = await orchestrator.run(user_query)
-        render_response(console, response, show_traces=verbose)
+        result = await run_single_query(question, app_config)
+        console.print(result)
         if output:
-            _save_to_file(response, output)
+            with open(output, "w") as f:
+                f.write(result)
+            console.print(f"[green]Response saved to {output}[/green]")
 
     asyncio.run(_run())
 
@@ -1480,48 +1378,16 @@ def query(ctx, question, output):
 @cli.command()
 @click.pass_context
 def chat(ctx):
-    """Start an interactive chat session."""
+    """Start an interactive chat session.
+
+    Uses SDK's ClaudeSDKClient for stateful multi-turn conversations.
+    """
     app_config = ctx.obj["config"]
     verbose = ctx.obj["verbose"]
     asyncio.run(run_repl(app_config, verbose=verbose))
-
-
-def _build_orchestrator(config):
-    """Bootstrap the orchestrator with a pool of multi-specialized agents.
-
-    Each agent in the pool is an identical SailPointExpertAgent — a full-stack
-    SailPoint & IAM expert capable of problem solving, explaining, coding,
-    testing, HLD, LLD, design, and IAM advisory. Multiple instances exist
-    for parallelism and context isolation, not for narrow specialization.
-    """
-    from sailpoint_agent.agents.orchestrator import OrchestratorAgent
-    from sailpoint_agent.agents.sailpoint_agent import SailPointExpertAgent
-    from sailpoint_agent.llm.factory import LLMProviderFactory
-    from sailpoint_agent.tools.web_search import SailPointWebSearch
-    from sailpoint_agent.tools.api_lookup import SailPointAPILookup
-    from sailpoint_agent.tools.doc_retriever import DocumentationRetriever
-
-    llm = LLMProviderFactory.create(config.llm)
-    tools = [SailPointWebSearch(config.search), SailPointAPILookup(), DocumentationRetriever()]
-
-    # Pool of multi-specialized agents (all equally capable of any task)
-    agents = {
-        "agent_alpha": SailPointExpertAgent(name="Agent-Alpha", llm=llm, tools=tools, config=config.agent),
-        "agent_beta": SailPointExpertAgent(name="Agent-Beta", llm=llm, tools=tools, config=config.agent),
-        "agent_gamma": SailPointExpertAgent(name="Agent-Gamma", llm=llm, tools=tools, config=config.agent),
-        "agent_delta": SailPointExpertAgent(name="Agent-Delta", llm=llm, tools=tools, config=config.agent),
-    }
-
-    return OrchestratorAgent(llm=llm, agents=agents, config=config.agent)
-
-
-def _save_to_file(response, filepath: str):
-    with open(filepath, "w") as f:
-        f.write(response.answer)
-    console.print(f"[green]Response saved to {filepath}[/green]")
 ```
 
-### 7.2 Interactive REPL — `sailpoint_agent/cli/repl.py`
+### 8.2 Interactive REPL — `sailpoint_agent/cli/repl.py`
 
 ```python
 from rich.console import Console
@@ -1602,7 +1468,7 @@ def _handle_command(cmd: str, history: list, config: AppConfig) -> bool:
     return True
 ```
 
-### 7.3 Response Renderer — `sailpoint_agent/cli/renderer.py`
+### 8.3 Response Renderer — `sailpoint_agent/cli/renderer.py`
 
 ```python
 from rich.console import Console
@@ -1655,9 +1521,9 @@ def render_response(
 
 ---
 
-## 8. Web UI Interface (Low-Level Design)
+## 9. Web UI Interface (Low-Level Design)
 
-### 8.1 Streamlit App — `sailpoint_agent/ui/streamlit_app.py`
+### 9.1 Streamlit App — `sailpoint_agent/ui/streamlit_app.py`
 
 ```python
 import streamlit as st
@@ -1774,9 +1640,11 @@ if __name__ == "__main__":
 
 ---
 
-## 9. Prompts Design
+## 10. Prompts Design
 
-### 9.1 System Prompts — `sailpoint_agent/prompts/system.py`
+> **Note:** The system prompt below is used as the main agent prompt and as the `prompt` field in `AgentDefinition` for subagents. Skills (Section 6) complement this prompt with task-specific instructions that the SDK loads automatically from `.claude/skills/*.md` files.
+
+### 10.1 System Prompts — `sailpoint_agent/prompts/system.py`
 
 ```python
 SAILPOINT_EXPERT_PROMPT = """You are a MULTI-SPECIALIZED SailPoint and IAM domain expert agent.
@@ -1868,7 +1736,7 @@ by your complete, well-formatted answer."""
 
 ---
 
-## 10. Configuration
+## 11. Configuration
 
 ### 10.1 config.yaml (Default)
 
@@ -1931,12 +1799,12 @@ LOG_LEVEL=INFO
 
 ---
 
-## 11. Sequence Diagrams
+## 12. Sequence Diagrams
 
-### 11.1 Single Query Flow
+### 12.1 Single Query Flow (via Claude Agent SDK)
 
 ```
-User                CLI              Orchestrator        ResearchAgent       WebSearch        LLM
+User                CLI              SDK query()         MCP Tools           Skills           Claude LLM
  │                   │                    │                   │                  │              │
  │ query "How to     │                    │                   │                  │              │
  │ create IIQ rule?" │                    │                   │                  │              │
@@ -1976,7 +1844,7 @@ User                CLI              Orchestrator        ResearchAgent       Web
 
 ---
 
-## 12. Error Handling Strategy
+## 13. Error Handling Strategy
 
 | Scenario | Handling |
 |----------|----------|
@@ -1991,20 +1859,20 @@ User                CLI              Orchestrator        ResearchAgent       Web
 
 ---
 
-## 13. Dependencies
+## 14. Dependencies
 
 ```
 # requirements.txt
-anthropic>=0.40.0
-openai>=1.50.0
-litellm>=1.50.0
-click>=8.1.0
-rich>=13.0.0
-streamlit>=1.40.0
-httpx>=0.27.0
-python-dotenv>=1.0.0
-pyyaml>=6.0.0
-structlog>=24.0.0
-pytest>=8.0.0
-pytest-asyncio>=0.24.0
+claude-agent-sdk>=1.0.0         # Core: Claude Agent SDK (ReAct loop, tools, subagents, Skills)
+anthropic>=0.40.0               # Claude API client (used by SDK internally)
+litellm>=1.50.0                 # Multi-LLM gateway for non-Claude providers
+click>=8.1.0                    # CLI framework
+rich>=13.0.0                    # Rich terminal output
+streamlit>=1.40.0               # Web UI framework
+httpx>=0.27.0                   # Async HTTP client for custom tools
+python-dotenv>=1.0.0            # Environment variable management
+pyyaml>=6.0.0                   # YAML configuration parsing
+structlog>=24.0.0               # Structured logging
+pytest>=8.0.0                   # Testing framework
+pytest-asyncio>=0.24.0          # Async test support
 ```
