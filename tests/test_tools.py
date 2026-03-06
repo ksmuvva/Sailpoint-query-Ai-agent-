@@ -1,7 +1,7 @@
 """Tests for custom MCP tools."""
 
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock
 
 
 @pytest.mark.asyncio
@@ -14,10 +14,10 @@ async def test_sailpoint_web_search_augments_iiq_query():
             {"title": "IIQ Docs", "url": "https://developer.sailpoint.com/docs", "snippet": "Test result"}
         ]
 
-        result = await sailpoint_web_search({"query": "BuildMap rule", "product": "iiq"})
+        # @tool wraps into SdkMcpTool — call the underlying handler
+        result = await sailpoint_web_search.handler({"query": "BuildMap rule", "product": "iiq"})
 
         assert "content" in result
-        # Verify the search was called (query augmentation happens inside)
         mock_search.assert_called_once()
         call_args = mock_search.call_args
         assert "IdentityIQ" in call_args[0][1]
@@ -31,7 +31,7 @@ async def test_sailpoint_web_search_augments_isc_query():
     with patch("sailpoint_agent.tools.sailpoint_search._execute_search", new_callable=AsyncMock) as mock_search:
         mock_search.return_value = []
 
-        result = await sailpoint_web_search({"query": "Transforms", "product": "isc"})
+        result = await sailpoint_web_search.handler({"query": "Transforms", "product": "isc"})
 
         assert "content" in result
         mock_search.assert_called_once()
@@ -47,7 +47,7 @@ async def test_sailpoint_web_search_handles_failure():
     with patch("sailpoint_agent.tools.sailpoint_search._execute_search", new_callable=AsyncMock) as mock_search:
         mock_search.side_effect = Exception("Network error")
 
-        result = await sailpoint_web_search({"query": "test", "product": "both"})
+        result = await sailpoint_web_search.handler({"query": "test", "product": "both"})
 
         assert "content" in result
         assert "Search failed" in result["content"][0]["text"]
@@ -65,7 +65,7 @@ async def test_doc_retriever_handles_failure():
         mock_client.get.side_effect = Exception("Timeout")
         mock_client_cls.return_value = mock_client
 
-        result = await doc_retriever({"url": "https://example.com/docs"})
+        result = await doc_retriever.handler({"url": "https://example.com/docs"})
 
         assert "Failed to fetch" in result["content"][0]["text"]
 
@@ -89,3 +89,19 @@ def test_format_results_with_data():
     assert "[1] Test Title" in formatted
     assert "https://example.com" in formatted
     assert "Test snippet" in formatted
+
+
+def test_tool_is_sdk_mcp_tool():
+    """Verify @tool decorator creates SdkMcpTool instances."""
+    from claude_agent_sdk import SdkMcpTool
+    from sailpoint_agent.tools.sailpoint_search import sailpoint_web_search
+    from sailpoint_agent.tools.api_lookup import api_lookup
+    from sailpoint_agent.tools.doc_retriever import doc_retriever
+
+    assert isinstance(sailpoint_web_search, SdkMcpTool)
+    assert isinstance(api_lookup, SdkMcpTool)
+    assert isinstance(doc_retriever, SdkMcpTool)
+
+    assert sailpoint_web_search.name == "sailpoint_web_search"
+    assert api_lookup.name == "api_lookup"
+    assert doc_retriever.name == "doc_retriever"
