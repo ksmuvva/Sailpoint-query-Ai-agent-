@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "sailpoint-tools": {
+      "type": "inprocess",
+      "module": "sailpoint_agent.tools",
+      "factory": "create_sailpoint_mcp_server"
+    }
+  }
+}
