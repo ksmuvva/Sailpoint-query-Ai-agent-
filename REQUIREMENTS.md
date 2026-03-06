@@ -17,7 +17,8 @@ The **SailPoint Query AI Agent** is an intelligent assistant that answers questi
 - Interactive CLI and web-based UI for querying SailPoint topics
 - Real-time web search across SailPoint documentation and IAM resources
 - Code generation, test case creation, and technical design capabilities
-- Multi-agent architecture using the ReAct (Reasoning + Acting) pattern
+- Multi-agent architecture with **multi-specialized agents** — each agent is a full SailPoint and IAM domain expert capable of problem solving, explaining, coding, design, test creation, HLD, LLD, and advisory tasks
+- ReAct (Reasoning + Acting) pattern for transparent, step-by-step problem solving
 - Support for multiple LLM backends (Claude, OpenAI, GLM, and others)
 
 ### 1.3 Target Users
@@ -138,7 +139,26 @@ The **SailPoint Query AI Agent** is an intelligent assistant that answers questi
 | FR-8.3 | Support multi-step research: chain multiple searches to build comprehensive answers | Must |
 | FR-8.4 | Configurable maximum iteration limit (default: 5) | Must |
 | FR-8.5 | Early termination when sufficient confidence is reached | Should |
-| FR-8.6 | Multi-agent orchestration: route queries to specialized sub-agents | Must |
+| FR-8.6 | Multi-agent orchestration: coordinate multi-specialized agents, each capable of the full range of SailPoint and IAM tasks | Must |
+
+### FR-8A: Multi-Specialized Agent Capabilities
+
+Each agent in the system is a **multi-specialized SailPoint and IAM domain expert** — not a narrow single-task worker. Every agent must be capable of performing **all** of the following tasks:
+
+| ID | Capability | Description | Priority |
+|----|-----------|-------------|----------|
+| FR-8A.1 | **Problem Solving & Troubleshooting** | Diagnose SailPoint configuration issues, debug BeanShell rules, resolve provisioning failures, analyze aggregation errors, troubleshoot connector problems | Must |
+| FR-8A.2 | **Explaining & Teaching** | Clearly explain SailPoint concepts, IAM principles, product architectures, API behaviors, and workflow logic to users of all experience levels | Must |
+| FR-8A.3 | **Code Generation** | Generate BeanShell rules, Java classes, XML configs, REST API examples, PowerShell scripts, ISC Transforms, Cloud Rules, SaaS connector code | Must |
+| FR-8A.4 | **Test Case Creation** | Produce unit tests, integration tests, UAT scenarios, E2E test plans, SOD validation tests, certification campaign tests, and regression test suites | Must |
+| FR-8A.5 | **High-Level Design (HLD)** | Create architecture-level design documents covering system topology, integration patterns, data flows, deployment strategy, and security architecture | Must |
+| FR-8A.6 | **Low-Level Design (LLD)** | Create implementation-level design documents with detailed class/module designs, configuration specs, API contracts, data models, and error handling strategies | Must |
+| FR-8A.7 | **Technical Design Documents** | Generate connector design specs, workflow/business process designs, provisioning plan designs, certification campaign designs, and integration architecture docs | Must |
+| FR-8A.8 | **IAM Domain Expertise** | Serve as an identity and access management specialist covering RBAC, ABAC, SOD, JML lifecycle, access certifications, provisioning patterns, compliance frameworks, and zero-trust architecture | Must |
+| FR-8A.9 | **SailPoint Product Expertise** | Deep knowledge across both IIQ (on-prem) and ISC/IDN (cloud), including version-specific guidance, migration strategies, best practices, and anti-patterns | Must |
+| FR-8A.10 | **Advisory & Best Practices** | Recommend architecture patterns, implementation approaches, performance optimizations, security hardening, and operational procedures for SailPoint deployments | Should |
+
+> **Design Principle:** The orchestrator routes queries to agents not because they have narrow specializations, but to enable parallel processing, context isolation, and workload distribution. Any agent can handle any SailPoint/IAM task.
 
 ### FR-9: Multi-LLM Support
 

@@ -11,7 +11,7 @@
 - **Name:** SailPoint Query AI Agent
 - **Purpose:** An intelligent assistant that answers questions about SailPoint identity governance products, generates code, creates test cases, and produces technical design documents.
 - **Domain:** Identity and Access Management (IAM), specifically SailPoint IdentityIQ, IdentityNow, and Identity Security Cloud.
-- **Architecture:** Multi-agent system using the ReAct (Reasoning + Acting) pattern, built with the Claude Agent SDK, supporting multiple LLM backends.
+- **Architecture:** Multi-agent system with **multi-specialized agents** — each agent is a full SailPoint and IAM domain expert capable of problem solving, explaining, coding, design, test creation, HLD, LLD, and IAM advisory. Uses the ReAct (Reasoning + Acting) pattern, built with the Claude Agent SDK, supporting multiple LLM backends.
 - **Interfaces:** CLI (Click + Rich) and Web UI (Streamlit).
 
 ---
@@ -348,15 +348,28 @@ When answering questions, search these sources in priority order:
 - "API endpoint"
 - "How to configure"
 
-### Multi-Agent Routing Guide
+### Multi-Specialized Agent Routing Guide
 
-| Query Pattern | Target Agent | Example |
-|---------------|-------------|---------|
-| "What is...", "How does...", "Explain..." | ResearchAgent | "How does IIQ correlation work?" |
-| "Write code for...", "Create a rule for...", "Generate script..." | CodeGeneratorAgent | "Write a BuildMap rule for flat file" |
-| "Create test cases for...", "Test scenarios for..." | TestCaseAgent | "Create UAT test cases for joiner workflow" |
-| "Design...", "Create HLD/LLD for...", "Architecture for..." | DesignAgent | "Design LLD for AD connector integration" |
-| Mixed/unclear | OrchestratorAgent routes to best match | "Help me set up certification" → Research |
+**Key Principle:** Every agent in the pool is a multi-specialized SailPoint & IAM expert. The orchestrator routes for **parallelism and context isolation**, not because agents have narrow specializations. Any agent can handle any task.
+
+| Query Complexity | Orchestrator Action | Example |
+|-----------------|-------------------|---------|
+| **Simple** (single concern) | Assign to any available agent | "How does IIQ correlation work?" → Agent-Alpha handles entirely |
+| **Compound** (multiple concerns) | Split and distribute across agents in parallel | "Design an AD connector and write test cases for it" → Agent-Alpha does design, Agent-Beta does test cases simultaneously |
+| **Multi-step** (sequential research) | Single agent iterates through ReAct loop | "Write a BuildMap rule for flat file with HR data" → Agent-Alpha searches docs, then generates code |
+
+**Each agent independently handles ALL of:**
+
+| Capability | Examples |
+|-----------|----------|
+| Problem Solving & Troubleshooting | Debug BeanShell rules, diagnose provisioning failures, fix connector errors |
+| Explaining & Teaching | Explain RBAC vs ABAC, describe IIQ workflow architecture, teach Cloud Rules |
+| Code Generation | BeanShell rules, Java classes, XML configs, REST API calls, ISC Transforms |
+| Test Case Creation | Unit tests, integration tests, UAT scenarios, E2E plans, SOD validation |
+| High-Level Design (HLD) | System topology, integration patterns, deployment strategy, security architecture |
+| Low-Level Design (LLD) | Class designs, config specs, API contracts, data models, error handling |
+| Technical Design Documents | Connector specs, workflow designs, provisioning plans, certification designs |
+| IAM Domain Advisory | RBAC/ABAC strategy, SOD policies, JML lifecycle, compliance, zero-trust |
 
 ---
 

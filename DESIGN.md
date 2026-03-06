@@ -27,30 +27,47 @@
 │                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │  Meta-ReAct Loop                                             │   │
-│  │  1. THINK: Classify query type → select agent(s)             │   │
-│  │  2. ACT:   Delegate to specialist agent(s)                   │   │
-│  │  3. OBSERVE: Collect sub-agent responses                     │   │
+│  │  1. THINK: Analyze query complexity & parallelism needs      │   │
+│  │  2. ACT:   Delegate to multi-specialized agent(s)            │   │
+│  │  3. OBSERVE: Collect agent responses                         │   │
 │  │  4. SYNTHESIZE: Aggregate into final response                │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                     │
-│  ┌──────────┐ ┌───────────────┐ ┌────────────┐ ┌──────────────┐   │
-│  │ Research  │ │ Code Generator│ │ Test Case  │ │   Design     │   │
-│  │ Agent     │ │ Agent         │ │ Agent      │ │   Agent      │   │
-│  └─────┬────┘ └──────┬────────┘ └─────┬──────┘ └──────┬───────┘   │
-│        │              │                │               │            │
-└────────┼──────────────┼────────────────┼───────────────┼────────────┘
-         │              │                │               │
-         ▼              ▼                ▼               ▼
+│  ┌────────────────────────────────────────────────────────────┐     │
+│  │          MULTI-SPECIALIZED AGENT POOL                      │     │
+│  │   Each agent is a full SailPoint + IAM domain expert       │     │
+│  │                                                            │     │
+│  │   Capabilities per agent:                                  │     │
+│  │   • Problem Solving & Troubleshooting                      │     │
+│  │   • Explaining & Teaching                                  │     │
+│  │   • Code Generation (BeanShell, Java, XML, REST, etc.)     │     │
+│  │   • Test Case Creation (Unit, Integration, UAT, E2E)       │     │
+│  │   • High-Level Design (HLD)                                │     │
+│  │   • Low-Level Design (LLD)                                 │     │
+│  │   • Technical Design Documents                             │     │
+│  │   • IAM Domain Advisory                                    │     │
+│  │                                                            │     │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │     │
+│  │  │ Agent A  │ │ Agent B  │ │ Agent C  │ │ Agent D  │     │     │
+│  │  │ (full    │ │ (full    │ │ (full    │ │ (full    │     │     │
+│  │  │ stack)   │ │ stack)   │ │ stack)   │ │ stack)   │     │     │
+│  │  └─────┬────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘     │     │
+│  └────────┼────────────┼────────────┼────────────┼───────────┘     │
+│           │            │            │            │                  │
+└───────────┼────────────┼────────────┼────────────┼─────────────────┘
+            │            │            │            │
+            ▼            ▼            ▼            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                          TOOLS LAYER                                │
+│                       SHARED TOOLS LAYER                            │
+│  (All agents have equal access to all tools)                        │
 │                                                                     │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐               │
 │  │ SailPoint    │ │ API          │ │ Doc          │               │
 │  │ Web Search   │ │ Lookup       │ │ Retriever    │               │
 │  └──────────────┘ └──────────────┘ └──────────────┘               │
 └─────────────────────────────────────────────────────────────────────┘
-         │              │                │
-         ▼              ▼                ▼
+            │              │                │
+            ▼              ▼                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      LLM PROVIDER LAYER                            │
 │                                                                     │
@@ -60,6 +77,26 @@
 │  └────────────┘  └────────────┘  └────────────┘  └────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+### Multi-Specialized Agent Design Principle
+
+Unlike traditional multi-agent systems where each agent has a narrow specialization (e.g., "code only" or "test only"), **every agent in this system is a multi-specialized SailPoint and IAM domain expert**. Each agent can independently:
+
+| Capability | Description |
+|-----------|-------------|
+| **Problem Solve** | Diagnose issues, debug rules, troubleshoot provisioning failures, resolve connector errors |
+| **Explain** | Teach SailPoint concepts, IAM principles, architecture patterns at any depth |
+| **Write Code** | BeanShell rules, Java classes, XML configs, REST API calls, PowerShell, ISC Transforms, Cloud Rules |
+| **Create Tests** | Unit tests, integration tests, UAT scenarios, E2E test plans, SOD validation, regression suites |
+| **Design (HLD)** | System topology, integration patterns, data flows, deployment strategy, security architecture |
+| **Design (LLD)** | Class/module designs, config specs, API contracts, data models, error handling |
+| **IAM Advisory** | RBAC/ABAC strategy, SOD policies, JML lifecycle, compliance frameworks, zero-trust patterns |
+
+**Why multi-specialized instead of narrow specialists?**
+- **No artificial boundaries** — real SailPoint work spans multiple concerns (e.g., "design a connector" requires code + design + testing knowledge)
+- **Parallel processing** — the orchestrator can assign parts of a complex query to multiple agents working simultaneously
+- **Context isolation** — each agent maintains its own context window, preventing cross-contamination on complex multi-part queries
+- **Resilience** — if one agent fails or hits token limits, another can pick up any part of the work
 
 ---
 
@@ -95,12 +132,9 @@ sailpoint-query-ai-agent/
 │   │
 │   ├── agents/
 │   │   ├── __init__.py              # Agent registry & exports
-│   │   ├── base.py                  # BaseAgent ABC with ReAct loop
-│   │   ├── orchestrator.py          # OrchestratorAgent
-│   │   ├── research.py              # ResearchAgent
-│   │   ├── code_generator.py        # CodeGeneratorAgent
-│   │   ├── test_generator.py        # TestCaseAgent
-│   │   └── design_generator.py      # DesignAgent
+│   │   ├── base.py                  # BaseAgent ABC with ReAct loop (multi-specialized)
+│   │   ├── orchestrator.py          # OrchestratorAgent (routes & coordinates)
+│   │   └── sailpoint_agent.py       # SailPointExpertAgent (multi-specialized: problem solving, explaining, coding, design, testing, HLD, LLD, IAM advisory)
 │   │
 │   ├── tools/
 │   │   ├── __init__.py              # Tool registry
@@ -147,10 +181,7 @@ sailpoint-query-ai-agent/
     ├── __init__.py
     ├── conftest.py                  # Shared fixtures
     ├── test_orchestrator.py
-    ├── test_research_agent.py
-    ├── test_code_generator.py
-    ├── test_test_generator.py
-    ├── test_design_generator.py
+    ├── test_sailpoint_expert_agent.py  # Tests for the multi-specialized SailPointExpertAgent
     ├── test_tools.py
     ├── test_llm_providers.py
     └── test_formatters.py
@@ -363,7 +394,13 @@ logger = get_logger(__name__)
 
 
 class BaseAgent(ABC):
-    """Abstract base class for all agents. Implements the ReAct loop."""
+    """Abstract base class for all agents. Implements the ReAct loop.
+
+    Each agent built from this base is a MULTI-SPECIALIZED SailPoint & IAM expert
+    capable of: problem solving, explaining, coding, test creation, HLD, LLD,
+    technical design, and IAM domain advisory. The orchestrator distributes work
+    across agents for parallelism and context isolation, not for specialization.
+    """
 
     def __init__(
         self,
@@ -516,25 +553,38 @@ from sailpoint_agent.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-ROUTING_PROMPT = """You are a query classifier for a SailPoint AI agent.
-Classify the user's query into exactly ONE of these categories:
-- RESEARCH: General questions about SailPoint IIQ, IDN, ISC, or IAM concepts
-- CODE_GENERATION: Requests to write BeanShell, Java, XML, JSON, PowerShell, or API code
-- TEST_CASE: Requests to create test cases or test scenarios
-- DESIGN: Requests to create technical designs (HLD, LLD, architecture)
-- GENERAL: Greetings, meta-questions, or unclear queries
+COMPLEXITY_ANALYSIS_PROMPT = """You are a query analyzer for a SailPoint AI agent.
+Analyze the user's query and determine:
+1. COMPLEXITY: SIMPLE (single concern) or COMPOUND (multiple concerns needing parallel work)
+2. TASK_TYPES: List all task types present (comma-separated):
+   - RESEARCH: Questions about SailPoint IIQ, IDN, ISC, or IAM concepts
+   - CODE_GENERATION: Write BeanShell, Java, XML, JSON, PowerShell, or API code
+   - TEST_CASE: Create test cases or test scenarios
+   - DESIGN_HLD: High-level architecture design
+   - DESIGN_LLD: Low-level implementation design
+   - TROUBLESHOOTING: Debug or diagnose SailPoint issues
+   - EXPLANATION: Explain concepts, processes, or behaviors
+   - IAM_ADVISORY: IAM strategy, compliance, best practices advice
+   - GENERAL: Greetings, meta-questions, or unclear queries
 
-Respond with ONLY the category name, nothing else."""
+Respond in format:
+COMPLEXITY: <SIMPLE|COMPOUND>
+TASK_TYPES: <comma-separated list>"""
 
 
 class OrchestratorAgent:
-    """Routes queries to specialized sub-agents and aggregates responses.
+    """Coordinates multi-specialized agents for query processing.
+
+    Each agent in the pool is a FULL SailPoint & IAM domain expert capable of
+    problem solving, explaining, coding, design, test creation, HLD, LLD, and
+    IAM advisory. The orchestrator distributes work for parallelism and context
+    isolation, not because agents have narrow specializations.
 
     Uses a meta-ReAct pattern:
-    1. THINK: Classify the query type
-    2. ACT: Delegate to the appropriate specialist agent
-    3. OBSERVE: Collect the specialist's response
-    4. SYNTHESIZE: Optionally enhance or delegate further
+    1. THINK: Analyze query complexity and identify parallelism opportunities
+    2. ACT: Assign to one or more multi-specialized agents
+    3. OBSERVE: Collect agent responses
+    4. SYNTHESIZE: Aggregate into unified final response
     """
 
     def __init__(
@@ -544,117 +594,161 @@ class OrchestratorAgent:
         config: AgentConfig = AgentConfig(),
     ):
         self.llm = llm
-        self.agents = agents  # {"research": ResearchAgent, "code": CodeAgent, ...}
+        self.agent_pool = agents  # Pool of multi-specialized SailPointExpertAgents
         self.config = config
 
-    async def route(self, query: UserQuery) -> QueryType:
-        """Classify the query to determine which agent handles it."""
-        if query.query_type:
-            return query.query_type
+    async def analyze_query(self, query: UserQuery) -> dict:
+        """Analyze query complexity and identify task types.
 
+        Returns dict with 'complexity' (SIMPLE|COMPOUND) and 'task_types' list.
+        Any agent can handle any task type — this analysis is used for
+        parallelism decisions, not for routing to narrow specialists.
+        """
         messages = [
-            {"role": "system", "content": ROUTING_PROMPT},
+            {"role": "system", "content": COMPLEXITY_ANALYSIS_PROMPT},
             {"role": "user", "content": query.text},
         ]
         response = await self.llm.chat(messages)
-        classification = response.content.strip().upper()
+        return self._parse_analysis(response.content)
 
-        type_map = {
-            "RESEARCH": QueryType.RESEARCH,
-            "CODE_GENERATION": QueryType.CODE_GENERATION,
-            "TEST_CASE": QueryType.TEST_CASE,
-            "DESIGN": QueryType.DESIGN,
-            "GENERAL": QueryType.GENERAL,
-        }
-        return type_map.get(classification, QueryType.RESEARCH)
+    def _get_available_agent(self) -> BaseAgent:
+        """Get the next available agent from the pool.
 
-    def _get_agent_for_type(self, query_type: QueryType) -> BaseAgent:
-        """Map query type to the responsible agent."""
-        agent_map = {
-            QueryType.RESEARCH: "research",
-            QueryType.CODE_GENERATION: "code",
-            QueryType.TEST_CASE: "test",
-            QueryType.DESIGN: "design",
-            QueryType.GENERAL: "research",  # Fallback to research
-            QueryType.API_LOOKUP: "research",
-        }
-        agent_key = agent_map.get(query_type, "research")
-        return self.agents[agent_key]
+        All agents are equally capable — selection is based on availability,
+        not specialization. Any agent can handle any SailPoint/IAM task.
+        """
+        # Simple round-robin; in production, check agent busy state
+        agents = list(self.agent_pool.values())
+        return agents[0]
 
     async def run(self, query: UserQuery) -> AgentResponse:
-        """Execute the orchestration loop."""
-        # Step 1: THINK — Classify the query
-        query_type = await self.route(query)
-        query.query_type = query_type
-        logger.info(f"[Orchestrator] Classified query as: {query_type.value}")
+        """Execute the orchestration loop with multi-specialized agents."""
+        # Step 1: THINK — Analyze query complexity
+        analysis = await self.analyze_query(query)
+        logger.info(f"[Orchestrator] Analysis: {analysis}")
 
-        # Step 2: ACT — Delegate to specialist agent
-        agent = self._get_agent_for_type(query_type)
-        logger.info(f"[Orchestrator] Delegating to: {agent.name}")
+        if analysis["complexity"] == "COMPOUND" and len(analysis["task_types"]) > 1:
+            # Step 2a: ACT — Distribute sub-tasks across multiple agents in parallel
+            # Each agent is fully capable of any task type
+            return await self._run_parallel(query, analysis["task_types"])
+        else:
+            # Step 2b: ACT — Assign to a single agent (any agent can handle it)
+            agent = self._get_available_agent()
+            logger.info(f"[Orchestrator] Assigning to: {agent.name}")
 
-        # Step 3: OBSERVE — Collect specialist response
-        response = await agent.run(query)
-        response.query_type = query_type.value
+            # Step 3: OBSERVE
+            response = await agent.run(query)
+            response.query_type = analysis["task_types"][0] if analysis["task_types"] else "general"
+            return response
 
-        # Step 4: SYNTHESIZE — Optionally enhance (e.g., add citations for code)
-        if query_type == QueryType.CODE_GENERATION and not response.citations:
-            response = await self._enrich_with_sources(query, response)
-
-        return response
-
-    async def _enrich_with_sources(
-        self, query: UserQuery, response: AgentResponse
+    async def _run_parallel(
+        self, query: UserQuery, task_types: list[str]
     ) -> AgentResponse:
-        """Optionally enrich a response with documentation sources."""
-        if "research" in self.agents:
-            research_agent = self.agents["research"]
-            source_query = UserQuery(
-                text=f"Find official SailPoint documentation for: {query.text}",
+        """Distribute compound queries across multiple multi-specialized agents.
+
+        Each agent handles a sub-task independently. All agents have full
+        SailPoint/IAM expertise — they are assigned by availability, not specialty.
+        """
+        import asyncio
+
+        agents = list(self.agent_pool.values())
+        tasks = []
+        for i, task_type in enumerate(task_types):
+            agent = agents[i % len(agents)]
+            sub_query = UserQuery(
+                text=f"[Focus on {task_type}]: {query.text}",
                 context=query.context,
             )
-            source_response = await research_agent.run(source_query)
-            response.citations = source_response.citations
-        return response
+            tasks.append(agent.run(sub_query))
+            logger.info(f"[Orchestrator] Assigned {task_type} to {agent.name}")
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return self._synthesize_results(results)
+
+    def _synthesize_results(self, results: list) -> AgentResponse:
+        """Combine results from multiple multi-specialized agents."""
+        combined_answer = []
+        all_citations = []
+        for result in results:
+            if isinstance(result, AgentResponse):
+                combined_answer.append(result.answer)
+                all_citations.extend(result.citations)
+        return AgentResponse(
+            answer="\n\n---\n\n".join(combined_answer),
+            citations=all_citations,
+        )
+
+    def _parse_analysis(self, content: str) -> dict:
+        """Parse complexity analysis response."""
+        lines = content.strip().split("\n")
+        complexity = "SIMPLE"
+        task_types = ["RESEARCH"]
+        for line in lines:
+            if line.startswith("COMPLEXITY:"):
+                complexity = line.split(":", 1)[1].strip()
+            elif line.startswith("TASK_TYPES:"):
+                task_types = [t.strip() for t in line.split(":", 1)[1].split(",")]
+        return {"complexity": complexity, "task_types": task_types}
 ```
 
-### 4.3 ResearchAgent — `sailpoint_agent/agents/research.py`
+### 4.3 SailPointExpertAgent — `sailpoint_agent/agents/sailpoint_agent.py`
+
+This is the **single multi-specialized agent class** used by all agents in the pool. Every instance has the full range of SailPoint and IAM capabilities.
 
 ```python
 from sailpoint_agent.agents.base import BaseAgent
 from sailpoint_agent.llm.base import LLMProvider
 from sailpoint_agent.tools.base import BaseTool
 from sailpoint_agent.models.config import AgentConfig
-from sailpoint_agent.prompts.system import RESEARCH_AGENT_PROMPT
+from sailpoint_agent.models.response import CodeBlock
+from sailpoint_agent.prompts.system import SAILPOINT_EXPERT_PROMPT
 
 
-class ResearchAgent(BaseAgent):
-    """Specialist agent for researching SailPoint documentation and IAM topics.
+class SailPointExpertAgent(BaseAgent):
+    """Multi-specialized SailPoint and IAM domain expert agent.
 
-    Tools: sailpoint_web_search, doc_retriever, api_lookup
-    Behavior: Searches SailPoint docs, fetches pages, synthesizes answers with citations.
+    Unlike narrow specialist agents, this agent is capable of ALL SailPoint tasks:
+    - Problem solving & troubleshooting (debug rules, diagnose provisioning, fix connectors)
+    - Explaining & teaching (concepts, architectures, APIs, workflows at any depth)
+    - Code generation (BeanShell, Java, XML, REST API, PowerShell, ISC Transforms, Cloud Rules)
+    - Test case creation (unit, integration, UAT, E2E, SOD validation, regression)
+    - High-Level Design (HLD) (system topology, integration patterns, deployment strategy)
+    - Low-Level Design (LLD) (class/module design, config specs, API contracts, data models)
+    - Technical design documents (connector specs, workflow designs, provisioning plans)
+    - IAM domain advisory (RBAC/ABAC strategy, SOD, JML lifecycle, compliance, zero-trust)
+
+    The orchestrator creates multiple instances of this agent for parallelism and
+    context isolation, not because they have different capabilities.
+
+    Tools: sailpoint_web_search, doc_retriever, api_lookup (all tools available to all agents)
     """
 
     def __init__(
         self,
+        name: str,
         llm: LLMProvider,
         tools: list[BaseTool],
         config: AgentConfig = AgentConfig(),
     ):
         super().__init__(
-            name="ResearchAgent",
+            name=name,
             llm=llm,
             tools=tools,
-            system_prompt=RESEARCH_AGENT_PROMPT,
+            system_prompt=SAILPOINT_EXPERT_PROMPT,
             config=config,
         )
 
     async def select_tool(self, thought: str) -> tuple[str, dict]:
-        """Select a research tool based on reasoning.
+        """Intelligently select the best tool based on current reasoning.
+
+        This agent has access to ALL tools and uses LLM-based tool selection
+        to pick the optimal tool for any task type.
 
         Decision logic:
         - If thought mentions needing to search → sailpoint_web_search
         - If thought mentions a specific URL → doc_retriever
-        - If thought mentions API endpoint → api_lookup
+        - If thought mentions API endpoint details → api_lookup
+        - For any task (code, test, design, troubleshooting) → search first, then synthesize
         """
         messages = [
             {"role": "system", "content": self._tool_selection_prompt()},
@@ -667,7 +761,12 @@ class ResearchAgent(BaseAgent):
         tool_descriptions = "\n".join(
             f"- {name}: {tool.description}" for name, tool in self.tools.items()
         )
-        return f"Select the best tool for the task. Available tools:\n{tool_descriptions}"
+        return f"""You are a multi-specialized SailPoint expert selecting the best tool.
+You can handle ANY task: research, coding, testing, design, troubleshooting, or advisory.
+Select the most relevant tool for your current reasoning step.
+
+Available tools:
+{tool_descriptions}"""
 
     def _tool_schemas(self) -> list[dict]:
         """Convert tools to LLM function-calling schema format."""
@@ -678,60 +777,11 @@ class ResearchAgent(BaseAgent):
         if response.tool_calls:
             call = response.tool_calls[0]
             return call.name, call.arguments
-        # Fallback: default to web search with the original query
+        # Fallback: default to web search
         return "sailpoint_web_search", {"query": "SailPoint documentation"}
-```
-
-### 4.4 CodeGeneratorAgent — `sailpoint_agent/agents/code_generator.py`
-
-```python
-from sailpoint_agent.agents.base import BaseAgent
-from sailpoint_agent.llm.base import LLMProvider
-from sailpoint_agent.tools.base import BaseTool
-from sailpoint_agent.models.config import AgentConfig
-from sailpoint_agent.models.response import CodeBlock
-from sailpoint_agent.prompts.system import CODE_GENERATOR_PROMPT
-
-
-class CodeGeneratorAgent(BaseAgent):
-    """Specialist agent for generating SailPoint-related code.
-
-    Generates: BeanShell rules, Java classes, XML configs, REST API examples,
-    PowerShell scripts, ISC Transform JSON, Cloud Rules.
-    """
-
-    def __init__(
-        self,
-        llm: LLMProvider,
-        tools: list[BaseTool],
-        config: AgentConfig = AgentConfig(),
-    ):
-        super().__init__(
-            name="CodeGeneratorAgent",
-            llm=llm,
-            tools=tools,
-            system_prompt=CODE_GENERATOR_PROMPT,
-            config=config,
-        )
-
-    async def select_tool(self, thought: str) -> tuple[str, dict]:
-        """Code agent typically searches for API specs or examples before generating."""
-        thought_lower = thought.lower()
-        if "search" in thought_lower or "find" in thought_lower or "look up" in thought_lower:
-            return "sailpoint_web_search", {"query": self._extract_search_query(thought)}
-        if "api" in thought_lower and "endpoint" in thought_lower:
-            return "api_lookup", {"query": self._extract_search_query(thought)}
-        # Default: search for relevant documentation
-        return "sailpoint_web_search", {"query": self._extract_search_query(thought)}
-
-    def _extract_search_query(self, thought: str) -> str:
-        """Extract search terms from agent thought."""
-        # Simple extraction — take the last sentence as search query
-        sentences = thought.strip().split(".")
-        return sentences[-1].strip() if sentences else thought[:100]
 
     def _parse_code_blocks(self, text: str) -> list[CodeBlock]:
-        """Extract code blocks from LLM response text."""
+        """Extract code blocks from response text (used for any task that includes code)."""
         blocks = []
         parts = text.split("```")
         for i in range(1, len(parts), 2):
@@ -745,87 +795,6 @@ class CodeGeneratorAgent(BaseAgent):
                 description="",
             ))
         return blocks
-```
-
-### 4.5 TestCaseAgent — `sailpoint_agent/agents/test_generator.py`
-
-```python
-from sailpoint_agent.agents.base import BaseAgent
-from sailpoint_agent.llm.base import LLMProvider
-from sailpoint_agent.tools.base import BaseTool
-from sailpoint_agent.models.config import AgentConfig
-from sailpoint_agent.prompts.system import TEST_GENERATOR_PROMPT
-
-
-class TestCaseAgent(BaseAgent):
-    """Specialist agent for generating test cases for SailPoint implementations.
-
-    Generates: Unit tests, integration tests, UAT scenarios, E2E test plans.
-    Output format: Structured test cases (ID, Description, Steps, Expected Result).
-    """
-
-    def __init__(
-        self,
-        llm: LLMProvider,
-        tools: list[BaseTool],
-        config: AgentConfig = AgentConfig(),
-    ):
-        super().__init__(
-            name="TestCaseAgent",
-            llm=llm,
-            tools=tools,
-            system_prompt=TEST_GENERATOR_PROMPT,
-            config=config,
-        )
-
-    async def select_tool(self, thought: str) -> tuple[str, dict]:
-        """Test agent searches for SailPoint feature specs to inform test cases."""
-        return "sailpoint_web_search", {"query": self._extract_search_query(thought)}
-
-    def _extract_search_query(self, thought: str) -> str:
-        sentences = thought.strip().split(".")
-        return sentences[-1].strip() if sentences else thought[:100]
-```
-
-### 4.6 DesignAgent — `sailpoint_agent/agents/design_generator.py`
-
-```python
-from sailpoint_agent.agents.base import BaseAgent
-from sailpoint_agent.llm.base import LLMProvider
-from sailpoint_agent.tools.base import BaseTool
-from sailpoint_agent.models.config import AgentConfig
-from sailpoint_agent.models.response import DesignDocument, DesignSection
-from sailpoint_agent.prompts.system import DESIGN_GENERATOR_PROMPT
-
-
-class DesignAgent(BaseAgent):
-    """Specialist agent for generating technical design documents.
-
-    Generates: HLD (High-Level Design), LLD (Low-Level Design),
-    architecture diagrams (ASCII), integration designs.
-    """
-
-    def __init__(
-        self,
-        llm: LLMProvider,
-        tools: list[BaseTool],
-        config: AgentConfig = AgentConfig(),
-    ):
-        super().__init__(
-            name="DesignAgent",
-            llm=llm,
-            tools=tools,
-            system_prompt=DESIGN_GENERATOR_PROMPT,
-            config=config,
-        )
-
-    async def select_tool(self, thought: str) -> tuple[str, dict]:
-        """Design agent researches architecture patterns and best practices."""
-        return "sailpoint_web_search", {"query": self._extract_search_query(thought)}
-
-    def _extract_search_query(self, thought: str) -> str:
-        sentences = thought.strip().split(".")
-        return sentences[-1].strip() if sentences else thought[:100]
 ```
 
 ---
@@ -1518,12 +1487,15 @@ def chat(ctx):
 
 
 def _build_orchestrator(config):
-    """Bootstrap the orchestrator with all agents and tools."""
+    """Bootstrap the orchestrator with a pool of multi-specialized agents.
+
+    Each agent in the pool is an identical SailPointExpertAgent — a full-stack
+    SailPoint & IAM expert capable of problem solving, explaining, coding,
+    testing, HLD, LLD, design, and IAM advisory. Multiple instances exist
+    for parallelism and context isolation, not for narrow specialization.
+    """
     from sailpoint_agent.agents.orchestrator import OrchestratorAgent
-    from sailpoint_agent.agents.research import ResearchAgent
-    from sailpoint_agent.agents.code_generator import CodeGeneratorAgent
-    from sailpoint_agent.agents.test_generator import TestCaseAgent
-    from sailpoint_agent.agents.design_generator import DesignAgent
+    from sailpoint_agent.agents.sailpoint_agent import SailPointExpertAgent
     from sailpoint_agent.llm.factory import LLMProviderFactory
     from sailpoint_agent.tools.web_search import SailPointWebSearch
     from sailpoint_agent.tools.api_lookup import SailPointAPILookup
@@ -1532,11 +1504,12 @@ def _build_orchestrator(config):
     llm = LLMProviderFactory.create(config.llm)
     tools = [SailPointWebSearch(config.search), SailPointAPILookup(), DocumentationRetriever()]
 
+    # Pool of multi-specialized agents (all equally capable of any task)
     agents = {
-        "research": ResearchAgent(llm=llm, tools=tools, config=config.agent),
-        "code": CodeGeneratorAgent(llm=llm, tools=tools, config=config.agent),
-        "test": TestCaseAgent(llm=llm, tools=tools, config=config.agent),
-        "design": DesignAgent(llm=llm, tools=tools, config=config.agent),
+        "agent_alpha": SailPointExpertAgent(name="Agent-Alpha", llm=llm, tools=tools, config=config.agent),
+        "agent_beta": SailPointExpertAgent(name="Agent-Beta", llm=llm, tools=tools, config=config.agent),
+        "agent_gamma": SailPointExpertAgent(name="Agent-Gamma", llm=llm, tools=tools, config=config.agent),
+        "agent_delta": SailPointExpertAgent(name="Agent-Delta", llm=llm, tools=tools, config=config.agent),
     }
 
     return OrchestratorAgent(llm=llm, agents=agents, config=config.agent)
@@ -1806,116 +1779,91 @@ if __name__ == "__main__":
 ### 9.1 System Prompts — `sailpoint_agent/prompts/system.py`
 
 ```python
-RESEARCH_AGENT_PROMPT = """You are a SailPoint identity governance expert research agent.
+SAILPOINT_EXPERT_PROMPT = """You are a MULTI-SPECIALIZED SailPoint and IAM domain expert agent.
 
-Your role is to answer questions about SailPoint IdentityIQ (IIQ), IdentityNow (IDN),
-and Identity Security Cloud (ISC) by searching official documentation and community resources.
+You are equally proficient across ALL of the following capabilities — you are NOT limited
+to any single specialization. You can seamlessly handle any combination of these tasks
+within a single interaction:
 
-## ReAct Process
-For each question, follow this process:
-1. THINK: Analyze the question. What SailPoint product does it relate to? What specific
-   feature or concept? What do you already know vs what do you need to look up?
-2. ACT: Use your tools to search documentation, fetch pages, or look up APIs.
-3. OBSERVE: Review the search results and extracted content.
-4. REPEAT steps 1-3 if you need more information.
-5. FINAL ANSWER: When you have enough information, provide your answer.
+## Your Full Capabilities
 
-## Response Guidelines
-- Always cite your sources with URLs
-- Distinguish between IIQ (on-premise) and IDN/ISC (cloud) when relevant
-- Include version-specific notes when applicable (IIQ 7.x vs 8.x)
-- Use clear, structured formatting with headings and bullet points
-- If you're unsure, say so rather than guessing
+### 1. Problem Solving & Troubleshooting
+- Diagnose SailPoint configuration issues, debug BeanShell rules, resolve provisioning failures
+- Analyze aggregation errors, troubleshoot connector problems, fix workflow issues
+- Identify root causes in IIQ and ISC environments
 
-## Authoritative Sources (search these first)
-- developer.sailpoint.com — APIs, SDKs, extensibility
-- documentation.sailpoint.com — Product guides
-- community.sailpoint.com — Community knowledge
-- developer.sailpoint.com/discuss — Developer forums
+### 2. Explaining & Teaching
+- Clearly explain SailPoint concepts (Identity Cubes, Provisioning Plans, Certifications, etc.)
+- Teach IAM principles (RBAC, ABAC, SOD, JML lifecycle, zero-trust)
+- Explain product architectures, API behaviors, and workflow logic at any depth
 
-When you have sufficient information, prefix your response with "FINAL ANSWER:" followed
-by your complete, well-formatted answer."""
-
-
-CODE_GENERATOR_PROMPT = """You are a SailPoint code generation expert agent.
-
-Your role is to generate production-quality code for SailPoint implementations including:
+### 3. Code Generation
 - BeanShell scripts for IIQ Rules (BuildMap, Correlation, Creation, IdentityAttribute, etc.)
 - Java classes for custom IIQ connectors, plugins, and task executors
 - XML configurations for Applications, Workflows, TaskDefinitions
 - REST API call examples (curl, Python, PowerShell)
-- ISC Transform JSON configurations
-- ISC Cloud Rule code
+- ISC Transform JSON configurations and Cloud Rule code
+- SaaS connector code (TypeScript)
+
+### 4. Test Case Creation
+- Unit test cases for BeanShell rules and Java components
+- Integration test scenarios for connector operations
+- UAT scenarios for identity lifecycle flows (JML, certifications, access requests)
+- E2E test plans, SOD policy validation tests, regression test suites
+- Structured format: ID, Title, Category, Priority, Preconditions, Steps, Expected Result
+
+### 5. High-Level Design (HLD)
+- Architecture overviews with system topology and component interactions
+- Integration patterns for connected systems (AD, LDAP, HR, databases, cloud apps)
+- Deployment strategy, scalability considerations, security architecture
+- Migration strategies (IIQ to ISC, version upgrades)
+
+### 6. Low-Level Design (LLD)
+- Detailed class/module designs with code-level specifications
+- Configuration specs (Application XML, Workflow XML, Rule code)
+- API contracts, data models, error handling strategies
+- Rule specifications with input/output definitions and edge case handling
+
+### 7. Technical Design Documents
+- Connector design specifications
+- Workflow/business process design documents
+- Provisioning plan designs and certification campaign designs
+- Integration architecture for multi-system environments
+
+### 8. IAM Domain Advisory
+- RBAC/ABAC strategy recommendations
+- SOD policy design and compliance framework guidance
+- JML lifecycle best practices
+- Zero-trust architecture patterns for identity governance
+- Regulatory compliance (SOX, HIPAA, GDPR) impact on identity controls
 
 ## ReAct Process
-1. THINK: What type of code is needed? What SailPoint APIs/classes are involved?
-2. ACT: Search documentation for relevant API signatures, examples, and patterns.
-3. OBSERVE: Review found patterns and adapt to the user's specific requirements.
-4. FINAL ANSWER: Provide complete, documented, production-ready code.
+For every task — regardless of type — follow this process:
+1. THINK: Analyze the request. What SailPoint product/version is relevant? What do you
+   already know vs what do you need to look up? What's the best approach?
+2. ACT: Use your tools to search documentation, fetch pages, or look up APIs.
+3. OBSERVE: Review the results and determine if you have enough information.
+4. REPEAT steps 1-3 if you need more information.
+5. FINAL ANSWER: Provide your complete, well-formatted response.
 
-## Code Quality Standards
-- Include inline comments explaining key logic
-- Follow SailPoint coding conventions (BeanShell style, Java naming)
-- Import all required classes explicitly
-- Handle errors and edge cases
-- Include usage instructions
+## Response Quality Standards
+- Always cite your sources with URLs
+- Distinguish between IIQ (on-premise) and IDN/ISC (cloud) when relevant
+- Include version-specific notes when applicable (IIQ 7.x vs 8.x)
+- Use clear, structured formatting with headings, tables, and bullet points
+- Code must include inline comments, follow SailPoint conventions, and import all required classes
+- If you're unsure, say so rather than guessing
+- Provide actionable, implementation-ready answers
 
-Prefix your final code response with "FINAL ANSWER:" """
+## Authoritative Sources (search these first)
+- developer.sailpoint.com — APIs, SDKs, extensibility
+- documentation.sailpoint.com — Product guides, admin manuals
+- community.sailpoint.com — Community knowledge base
+- developer.sailpoint.com/discuss — Developer forums
+- github.com/sailpoint-oss — Open-source projects and examples
 
-
-TEST_GENERATOR_PROMPT = """You are a SailPoint test case generation expert agent.
-
-Your role is to create comprehensive test cases for SailPoint identity governance
-implementations. You generate test cases for:
-- Unit testing BeanShell rules and Java components
-- Integration testing connector operations
-- UAT scenarios for identity lifecycle flows
-- Certification campaign testing
-- Access request workflow testing
-- SOD policy validation testing
-
-## Test Case Format
-Each test case must include:
-- ID: Unique identifier (e.g., TC-001)
-- Title: Brief description
-- Category: Unit / Integration / UAT / E2E
-- Priority: High / Medium / Low
-- Preconditions: Setup required before execution
-- Steps: Numbered step-by-step procedure
-- Expected Result: What should happen
-
-## ReAct Process
-1. THINK: What feature needs testing? What are the critical paths and edge cases?
-2. ACT: Search for SailPoint documentation on the feature to understand expected behavior.
-3. OBSERVE: Review official behavior specifications.
-4. FINAL ANSWER: Provide structured test cases covering positive, negative, and edge cases.
-
-Prefix your final response with "FINAL ANSWER:" """
-
-
-DESIGN_GENERATOR_PROMPT = """You are a SailPoint technical design expert agent.
-
-Your role is to create professional technical design documents for SailPoint
-implementations including:
-- High-Level Design (HLD): Architecture overview, component interactions, integration points
-- Low-Level Design (LLD): Detailed specifications, data models, rule logic, workflow definitions
-- Integration designs: Connected systems (AD, LDAP, HR, databases)
-- Connector designs: Custom connector specifications
-
-## Document Structure
-HLD sections: Executive Summary, Architecture Overview, Component Design, Integration Points,
-Security Considerations, Deployment Architecture.
-
-LLD sections: Detailed Component Specs, Data Models, Rule Specifications, Workflow Definitions,
-API Specifications, Error Handling, Configuration Details.
-
-## ReAct Process
-1. THINK: What scope of design is needed? What components are involved?
-2. ACT: Search for SailPoint architecture patterns and best practices.
-3. OBSERVE: Review found patterns and reference architectures.
-4. FINAL ANSWER: Provide a complete, professional design document.
-
-Prefix your final response with "FINAL ANSWER:" """
+When you have sufficient information, prefix your response with "FINAL ANSWER:" followed
+by your complete, well-formatted answer."""
 ```
 
 ---
